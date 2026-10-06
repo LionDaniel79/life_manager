@@ -88,3 +88,21 @@ test('save deadline keeps inputs, avoids duplicate writes and accepts later conf
   await expect(input(page)).toHaveValue('3');
   expect(await page.evaluate(() => __loadingHarness.remote.u1.dailyBudgets[0].overrides.reading)).toBe(105);
 });
+
+test('a late pre-save read cannot replace a confirmed budget with defaults', async ({ page }) => {
+  await open(page);
+  await expect(input(page)).toHaveValue('2');
+  await input(page).fill('1.75');
+  await page.locator('#daily-budget-form button[type="submit"]').click();
+  await page.waitForFunction(() => __loadingHarness.writes === 1);
+  await page.evaluate(() => __loadingHarness.saves[0].resolve());
+  await page.evaluate(() => {
+    const old = __loadingHarness.requests.shift();
+    old.resolve({ weeklyBudgets: structuredClone(__loadingHarness.remote.u1.weeklyBudgets), dailyBudgets: [] });
+  });
+  await page.waitForFunction(() => __loadingHarness.reads === 2);
+  expect(await page.evaluate(() => __loadingHarness.initWrites)).toBe(0);
+  await expect(input(page)).toHaveValue('1.75');
+  await page.evaluate(() => __loadingHarness.resolveReads());
+  await expect(input(page)).toHaveValue('1.75');
+});

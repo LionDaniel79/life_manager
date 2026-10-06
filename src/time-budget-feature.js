@@ -50,6 +50,7 @@ const state = {
   saving: new Map(),
   initializing: new Map(),
   budgetRevisions: new Map(),
+  writeVersion: 0,
 };
 let loadingPromise = null;
 let reloadRequested = false;
@@ -176,6 +177,7 @@ async function ensureCurrentWeekSnapshot() {
     pending.then(() => {
       if (!context.current()) return;
       if (!state.saving.has(token) && (state.budgetRevisions.get(token) || 0) === revision) {
+        state.writeVersion += 1;
         replaceDocument(kind === 'weekly' ? state.weekly : state.daily, key, snapshot);
         changed = true;
         cacheBudgets(context);
@@ -194,7 +196,7 @@ async function ensureCurrentWeekSnapshot() {
 }
 
 async function applyCachedData(context) {
-  if (!context.runtime || state.cacheLoaded) return false;
+  if (!context.runtime || state.cacheLoaded || state.ready) return false;
   try {
     const snapshot = await withTimeout(() => context.runtime.store.getSnapshot(context.user.uid), 1500);
     if (!context.current()) return false;
@@ -213,6 +215,7 @@ async function applyCachedData(context) {
 }
 
 async function performLoadData(context = sessionContext()) {
+  const writeVersion = state.writeVersion;
   state.loading = true;
   state.loadError = '';
   renderActiveView();
@@ -221,6 +224,12 @@ async function performLoadData(context = sessionContext()) {
   try {
     const result = await withTimeout(() => context.dataSource.loadTimeBudgetData(context.user.uid));
     if (!context.current()) return;
+    // A pre-save read must not erase a confirmed value or schedule defaults over it.
+    if (state.writeVersion !== writeVersion) {
+      context.dataSource.invalidate?.(context.user.uid, 'budgets');
+      reloadRequested = true;
+      return;
+    }
     state.weekly = result.weeklyBudgets;
     state.daily = result.dailyBudgets;
     state.ready = true;
@@ -439,6 +448,7 @@ async function confirmBudgetSave(key, inputs, mode, write, apply) {
   const operation = Promise.resolve().then(() => write(context)).then(() => {
     if (!context.current()) return;
     state.saving.delete(key);
+    state.writeVersion += 1;
     apply();
     if (JSON.stringify(state.drafts[draftKey] || {}) === draftAtSave) delete state.drafts[draftKey];
     state.lastLoaded = Date.now();
@@ -528,6 +538,7 @@ document.addEventListener('weekly-time-budget:infrastructure-state', async (even
   if (previousUid !== nextUid) {
     state.generation += 1;
     state.weekly = []; state.daily = []; state.cacheLoaded = false; state.ready = false;
+    state.writeVersion = 0;
     state.lastLoaded = 0; state.loading = false; state.loadError = ''; state.drafts = {};
     state.saving = new Map(); state.initializing = new Map(); state.budgetRevisions = new Map();
     loadingPromise = null; reloadRequested = false;
