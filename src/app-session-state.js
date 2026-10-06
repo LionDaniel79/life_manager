@@ -1,3 +1,4 @@
+import { withTimeout } from './async-control.js';
 import {
   createDefaultUiState,
   mergeUiState,
@@ -29,10 +30,10 @@ export function createAppSessionState({
     },
 
     async restore() {
-      const [snapshot, savedUi] = await Promise.all([
+      const [snapshot, savedUi] = await withTimeout(() => Promise.all([
         store.getSnapshot(userId),
         store.getUiState(userId),
-      ]);
+      ]), 2000);
       if (snapshot) onSnapshot(snapshot);
       await refreshMergedEntries();
       const uiState = normalizeUiState(savedUi || {}, uiContext());

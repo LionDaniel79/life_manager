@@ -1,3 +1,5 @@
+import { withTimeout } from './async-control.js';
+import { buildPreviousResultSnapshots } from './previous-results-budget-migration.js';
 import { getWeekRange, toDateKey } from './domain.js';
 import {
   buildPreviousWeekBudgetDefaults,
@@ -18,7 +20,7 @@ import {
   renderDashboardHtml,
   renderTimeBudgetHtml,
 } from './time-budget-ui.js';
-import { showOfflineNotice, showToast } from './app-toast.js';
+import { showToast } from './app-toast.js';
 import { filterCategoriesActiveOnDate, isArchivedCategoryVisibleInRange, isCategoryActiveInRange } from './category-effective-date.js';
 import {
   buildRecordedPeriodIndex,
@@ -39,6 +41,15 @@ const state = {
   loading: false,
   cacheLoaded: false,
   activeView: 'dashboard',
+  ready: false,
+  userDataReady: false,
+  loadError: '',
+  lastLoaded: 0,
+  generation: 0,
+  drafts: {},
+  saving: new Map(),
+  initializing: new Map(),
+  budgetRevisions: new Map(),
 };
 let loadingPromise = null;
 let reloadRequested = false;
@@ -124,88 +135,142 @@ function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
     .map((category) => activeIds.has(category.id) ? category : { ...category, defaultBudgetMinutes: 0, budgetMinutes: 0 });
 }
 
-function shouldInitializeFromPreviousResults(source) {
-  if (!source) return true;
-  if (source.initializedFromPreviousResults) return false;
-  const explicitBudgetIds = Array.isArray(source.explicitBudgetIds)
-    ? source.explicitBudgetIds
-    : Object.keys(source.budgets || {});
-  return explicitBudgetIds.length === 0;
+function sessionContext() {
+  const { user, runtime, dataSource, generation } = state;
+  return { user, runtime, dataSource, current: () => state.generation === generation && state.user?.uid === user?.uid };
+}
+
+function replaceDocument(items, key, document) {
+  const index = items.findIndex((item) => (item[key] || item.id) === document[key]);
+  if (index < 0) items.push(document);
+  else items[index] = document;
+}
+
+function cacheBudgets(context) {
+  if (!context.current() || !context.runtime) return;
+  const partial = { weeklyBudgets: [...state.weekly], dailyBudgets: [...state.daily], updatedAt: Date.now() };
+  withTimeout(() => context.runtime.store.patchSnapshot(context.user.uid, partial), 1500)
+    .catch((error) => console.warn('예산 캐시 저장 지연', error));
 }
 
 async function ensureCurrentWeekSnapshot() {
-  const weekStart = currentWeekStart();
-  const source = findWeekDocument(weekStart);
-  if (!shouldInitializeFromPreviousResults(source)) return;
-  const categories = activeCategories(today());
-  const budgets = buildPreviousWeekBudgetDefaults({ categories, entries: state.entries, weekStart });
-  const snapshot = {
-    id: source?.id || weekStart,
-    weekStart,
-    budgets,
-    explicitBudgetIds: [],
-    initializedFromPreviousResults: true,
-  };
-  await state.dataSource.ensureCurrentWeekBudget(state.user.uid, snapshot);
-  const index = state.weekly.findIndex((week) => (week.weekStart || week.id) === weekStart);
-  if (index >= 0) state.weekly[index] = snapshot;
-  else state.weekly.push(snapshot);
+  if (!state.userDataReady) return;
+  const context = sessionContext();
+  const plan = buildPreviousResultSnapshots({
+    categories: activeCategories(today()), entries: state.entries, weeklyBudgets: state.weekly,
+    dailyBudgets: state.daily, today: today(), weekStart: currentWeekStart(),
+  });
+  const tasks = [
+    ['weekly', plan.weekly, 'weekStart', (snapshot) => context.dataSource.ensureCurrentWeekBudget(context.user.uid, snapshot)],
+    ['daily', plan.daily, 'date', (snapshot) => context.dataSource.saveDailyBudgetSnapshot(context.user.uid, snapshot.date, snapshot)],
+  ];
+  let changed = false;
+  for (const [kind, snapshot, key, write] of tasks) {
+    if (!snapshot) continue;
+    const token = `${kind}:${snapshot[key]}`;
+    if (state.initializing.has(token) || state.saving.has(token)) continue;
+    // Firestore retains queued writes. Do not resubmit an initializer on timeout.
+    const revision = state.budgetRevisions.get(token) || 0;
+    const pending = Promise.resolve().then(() => write(snapshot));
+    state.initializing.set(token, pending);
+    pending.then(() => {
+      if (!context.current()) return;
+      if (!state.saving.has(token) && (state.budgetRevisions.get(token) || 0) === revision) {
+        replaceDocument(kind === 'weekly' ? state.weekly : state.daily, key, snapshot);
+        changed = true;
+        cacheBudgets(context);
+        renderActiveView();
+        if (changed) document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed', { detail: { userId: context.user.uid, scope: 'budgets' } }));
+      }
+    }).catch((error) => {
+      if (!context.current()) return;
+      state.loadError = '기본 예산 저장을 확인하지 못했습니다. 연결 후 다시 불러오세요.';
+      renderActiveView();
+      console.warn('기본 예산 초기화 지연', error);
+    }).finally(() => {
+      if (context.current() && state.initializing.get(token) === pending) state.initializing.delete(token);
+    });
+  }
 }
 
-async function applyCachedData() {
-  if (!state.runtime || state.cacheLoaded) return false;
-  const snapshot = await state.runtime.store.getSnapshot(state.user.uid);
-  state.cacheLoaded = true;
-  if (!snapshot) return false;
-  if (Array.isArray(snapshot.weeklyBudgets)) state.weekly = snapshot.weeklyBudgets;
-  if (Array.isArray(snapshot.dailyBudgets)) state.daily = snapshot.dailyBudgets;
-  applyRestoredUiState(globalThis.window?.__weeklyTimeBudgetUiState || {});
-  return true;
-}
-
-async function performLoadData() {
-  state.loading = true;
-  const hadCache = await applyCachedData();
+async function applyCachedData(context) {
+  if (!context.runtime || state.cacheLoaded) return false;
   try {
-    const result = await state.dataSource.loadTimeBudgetData(state.user.uid);
+    const snapshot = await withTimeout(() => context.runtime.store.getSnapshot(context.user.uid), 1500);
+    if (!context.current()) return false;
+    state.cacheLoaded = true;
+    if (!snapshot) return false;
+    if (Array.isArray(snapshot.weeklyBudgets)) state.weekly = snapshot.weeklyBudgets;
+    if (Array.isArray(snapshot.dailyBudgets)) state.daily = snapshot.dailyBudgets;
+    state.ready = Array.isArray(snapshot.weeklyBudgets) || Array.isArray(snapshot.dailyBudgets);
+    applyRestoredUiState(globalThis.window?.__weeklyTimeBudgetUiState || {});
+    renderActiveView();
+    return state.ready;
+  } catch (error) {
+    console.warn('예산 캐시 읽기 실패, 서버 조회를 계속합니다.', error);
+    return false;
+  }
+}
+
+async function performLoadData(context = sessionContext()) {
+  state.loading = true;
+  state.loadError = '';
+  renderActiveView();
+  await applyCachedData(context);
+  if (!context.current()) return;
+  try {
+    const result = await withTimeout(() => context.dataSource.loadTimeBudgetData(context.user.uid));
+    if (!context.current()) return;
     state.weekly = result.weeklyBudgets;
     state.daily = result.dailyBudgets;
-    await ensureCurrentWeekSnapshot();
-    await state.runtime.store.patchSnapshot(state.user.uid, {
-      weeklyBudgets: state.weekly,
-      dailyBudgets: state.daily,
-      updatedAt: Date.now(),
-    });
+    state.ready = true;
+    state.lastLoaded = Date.now();
+    cacheBudgets(context);
+    // Rendering never waits for an automatic remote write.
+    ensureCurrentWeekSnapshot().catch(console.error);
   } catch (error) {
-    if (!hadCache && !state.weekly.length && !state.daily.length) throw error;
-    console.warn('대시보드 오프라인 스냅숏 사용', error);
-    showOfflineNotice();
+    if (!context.current()) return;
+    state.loadError = '서버 응답이 늦거나 연결이 끊겼습니다. 저장된 자료가 있으면 그대로 표시합니다.';
+    console.warn('시간 예산 데이터 갱신 지연', error);
   } finally {
-    const now = today();
-    const week = currentWeekStart();
-    state.dashboard.today = now;
-    state.dashboard.currentWeekStart = week;
-    state.budget.today = now;
-    if (state.dashboard.selectedDate > now) state.dashboard.selectedDate = now;
-    if (state.dashboard.selectedWeekStart > week) state.dashboard.selectedWeekStart = week;
-    state.loading = false;
+    if (context.current()) {
+      applyRestoredUiState();
+      state.loading = false;
+      renderActiveView();
+    }
   }
 }
 
-async function loadData() {
+async function loadData({ force = false } = {}) {
   if (!state.user || !state.runtime || !state.dataSource) return;
   if (loadingPromise) {
-    reloadRequested = true;
+    if (force) reloadRequested = true;
     return loadingPromise;
   }
-  loadingPromise = (async () => {
+  if (!force && state.ready && Date.now() - state.lastLoaded < 15000) return;
+  const context = sessionContext();
+  const promise = (async () => {
     do {
       reloadRequested = false;
-      await performLoadData();
-    } while (reloadRequested && state.user);
+      await performLoadData(context);
+    } while (reloadRequested && context.current());
   })();
-  try { await loadingPromise; }
-  finally { loadingPromise = null; }
+  loadingPromise = promise;
+  try { await promise; }
+  finally { if (loadingPromise === promise) loadingPromise = null; }
+}
+
+function loadingNotice() {
+  if (state.saving.size) return '<p class="muted" role="status">서버 저장 확인을 기다리고 있습니다. 입력값은 유지됩니다.</p>';
+  if (state.loadError) return '<div class="card budget-load-notice" role="status"><p>서버 연결을 확인하지 못했습니다. 저장된 자료가 있으면 그대로 표시합니다.</p><button type="button" class="secondary-button" data-budget-retry>다시 불러오기</button></div>';
+  return state.loading ? '<p class="muted" role="status">저장된 자료를 먼저 표시하고 최신 예산을 확인하고 있습니다.</p>' : '';
+}
+
+function bindRetry(root) {
+  root.querySelector('[data-budget-retry]')?.addEventListener('click', () => {
+    state.dataSource?.invalidate?.(state.user.uid, 'budgets');
+    loadData({ force: true }).catch(console.error);
+  });
 }
 
 function weeklySummary(key) {
@@ -239,6 +304,7 @@ function dashboardRecordedWeekModel() {
 function renderDashboard() {
   const root = document.querySelector('#dashboard-view');
   if (!root || !state.user) return;
+  if (!state.ready) { root.innerHTML = loadingNotice() || '<p role="status">예산 자료를 불러오고 있습니다.</p>'; bindRetry(root); return; }
   const dates = recordedDateKeys(state.entries, state.dashboard.today);
   if (state.dashboard.mode === 'weekly') {
     const recordedWeek = dashboardRecordedWeekModel();
@@ -246,7 +312,7 @@ function renderDashboard() {
       state.dashboard.selectedWeekStart = recordedWeek.selected;
       saveFeatureUiState({ dashboard: { ...state.dashboard } });
     }
-    root.innerHTML = `<div data-feature-ui="dashboard">${renderDashboardHtml({
+    root.innerHTML = `<div data-feature-ui="dashboard">${loadingNotice()}${renderDashboardHtml({
       mode: 'weekly',
       selectedWeekStart: recordedWeek.selected,
       currentWeekStart: state.dashboard.currentWeekStart,
@@ -260,7 +326,7 @@ function renderDashboard() {
     const weekKey = getWeekRange(new Date(`${date}T12:00:00`)).start;
     const week = normalizeWeek(weekKey);
     const dailyDocument = dailyFor(date);
-    root.innerHTML = `<div data-feature-ui="dashboard">${renderDashboardHtml({
+    root.innerHTML = `<div data-feature-ui="dashboard">${loadingNotice()}${renderDashboardHtml({
       mode: 'daily', selectedDate: date, today: state.dashboard.today,
       previousDate: previousRecordedDate(dates, date),
       calendarYear: state.dashboard.calendarYear,
@@ -272,6 +338,7 @@ function renderDashboard() {
       }),
     })}</div>`;
   }
+  bindRetry(root);
   bindDashboardControls({
     root,
     state: state.dashboard,
@@ -327,8 +394,10 @@ function moveCalendar(direction) {
 function renderBudget() {
   const root = document.querySelector('#budget-view');
   if (!root || !state.user) return;
+  if (!state.ready) { root.innerHTML = loadingNotice() || '<p role="status">예산 자료를 불러오고 있습니다.</p>'; bindRetry(root); return; }
+  const focusedName = root.querySelector('input:focus')?.name;
   const weekStart = currentWeekStart();
-  root.innerHTML = `<div data-feature-ui="budget">${renderTimeBudgetHtml({
+  root.innerHTML = `<div data-feature-ui="budget">${loadingNotice()}${renderTimeBudgetHtml({
     mode: state.budget.mode,
     today: state.budget.today,
     categories: activeCategories(state.budget.today),
@@ -338,6 +407,16 @@ function renderBudget() {
     dailyDefaults: dailyDefaults(state.budget.today),
     emptyHtml: document.querySelector('#empty-template')?.innerHTML || '',
   })}</div>`;
+  const draftKey = `${state.budget.today}:${state.budget.mode}`;
+  const draft = state.drafts[draftKey] || {};
+  root.querySelectorAll('input[name]').forEach((input) => {
+    if (Object.prototype.hasOwnProperty.call(draft, input.name)) input.value = draft[input.name];
+    input.addEventListener('input', () => {
+      state.drafts[draftKey] = { ...(state.drafts[draftKey] || {}), [input.name]: input.value };
+    });
+    if (input.name === focusedName) input.focus({ preventScroll: true });
+  });
+  bindRetry(root);
   bindTimeBudgetControls({
     root,
     state: state.budget,
@@ -348,6 +427,37 @@ function renderBudget() {
     onSaveDaily: saveDaily,
     onSaveWeekly: saveWeekly,
   });
+}
+
+async function confirmBudgetSave(key, inputs, mode, write, apply) {
+  if (state.saving.has(key)) throw new Error('이전 저장의 서버 확인을 기다리고 있습니다. 연결이 복구되면 반영됩니다.');
+  const context = sessionContext();
+  state.budgetRevisions.set(key, (state.budgetRevisions.get(key) || 0) + 1);
+  const draftKey = `${today()}:${mode}`;
+  state.drafts[draftKey] = { ...inputs };
+  const draftAtSave = JSON.stringify(state.drafts[draftKey]);
+  const operation = Promise.resolve().then(() => write(context)).then(() => {
+    if (!context.current()) return;
+    state.saving.delete(key);
+    apply();
+    if (JSON.stringify(state.drafts[draftKey] || {}) === draftAtSave) delete state.drafts[draftKey];
+    state.lastLoaded = Date.now();
+    state.loadError = '';
+    cacheBudgets(context);
+    renderActiveView();
+    document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed', { detail: { userId: context.user.uid, scope: 'budgets' } }));
+    showToast({ type: 'success', title: '시간 예산을 저장했습니다.', message: '서버 반영을 확인했습니다.' });
+  }).finally(() => { if (context.current()) { state.saving.delete(key); renderActiveView(); } });
+  state.saving.set(key, operation);
+  // Preserve typed values and release the button even if confirmation is delayed.
+  state.drafts[draftKey] = { ...inputs };
+  try {
+    await withTimeout(operation, 8000, '서버 저장 확인이 지연되고 있습니다. 입력값은 유지됩니다. 창을 닫지 말고 연결을 확인하세요.');
+  } catch (error) {
+    if (context.current()) renderActiveView();
+    if (context.current()) showToast({ type: 'error', title: error.code === 'deadline-exceeded' ? '저장 확인 대기 중' : '시간 예산 저장 실패', message: error.message });
+    throw error;
+  }
 }
 
 async function saveDaily(inputs) {
@@ -362,14 +472,9 @@ async function saveDaily(inputs) {
     const parsed = parseOptionalDailyHours(inputs[category.id]);
     if (parsed.explicit) overrides[category.id] = parsed.minutes;
   }
-  try { await state.dataSource.saveDailyBudget(state.user.uid, date, overrides); }
-  catch (error) {
-    showToast({ type: 'error', title: '오늘 시간 예산을 저장하지 못했습니다.', message: '예산 변경은 인터넷 연결 후 다시 시도하세요.' });
-    throw error;
-  }
-  await loadData(); renderBudget(); renderDashboard();
-  document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
-  alert('오늘 시간 예산을 저장했습니다.');
+  await confirmBudgetSave(`daily:${date}`, inputs, 'today',
+    (context) => context.dataSource.saveDailyBudget(context.user.uid, date, overrides),
+    () => replaceDocument(state.daily, 'date', { date, overrides, userModified: true, defaultSourceVersion: 'previous-results-v3' }));
 }
 
 async function saveWeekly({ budgetInputs }) {
@@ -391,14 +496,9 @@ async function saveWeekly({ budgetInputs }) {
   snapshot.budgets = { ...preservedBudgets, ...snapshot.budgets };
   snapshot.explicitBudgetIds = [...new Set([...preservedExplicitBudgetIds, ...snapshot.explicitBudgetIds])];
   snapshot.initializedFromPreviousResults = true;
-  try { await state.dataSource.saveWeeklyBudget(state.user.uid, snapshot); }
-  catch (error) {
-    showToast({ type: 'error', title: '이번 주 시간 예산을 저장하지 못했습니다.', message: '예산 변경은 인터넷 연결 후 다시 시도하세요.' });
-    throw error;
-  }
-  await loadData(); renderBudget(); renderDashboard();
-  document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
-  alert('이번 주 시간 예산을 저장했습니다.');
+  await confirmBudgetSave(`weekly:${weekStart}`, budgetInputs, 'week',
+    (context) => context.dataSource.saveWeeklyBudget(context.user.uid, snapshot),
+    () => replaceDocument(state.weekly, 'weekStart', { ...snapshot, userModified: true, defaultSourceVersion: 'previous-results-v3' }));
 }
 
 function updateHeader(view) {
@@ -424,43 +524,56 @@ function renderActiveView() {
 document.addEventListener('weekly-time-budget:infrastructure-state', async (event) => {
   const detail = event.detail || {};
   const previousUid = state.user?.uid;
+  const nextUid = detail.user?.uid;
+  if (previousUid !== nextUid) {
+    state.generation += 1;
+    state.weekly = []; state.daily = []; state.cacheLoaded = false; state.ready = false;
+    state.lastLoaded = 0; state.loading = false; state.loadError = ''; state.drafts = {};
+    state.saving = new Map(); state.initializing = new Map(); state.budgetRevisions = new Map();
+    loadingPromise = null; reloadRequested = false;
+    document.querySelector('#budget-view').innerHTML = '';
+    document.querySelector('#dashboard-view').innerHTML = '';
+  }
   state.user = detail.user || null;
   state.runtime = detail.offlineRuntime || null;
   state.dataSource = detail.dataSource || null;
+  state.userDataReady = detail.userDataReady === true;
   state.categories = Array.isArray(detail.categories) ? detail.categories : [];
   state.archived = Array.isArray(detail.archivedCategories) ? detail.archivedCategories : [];
   state.entries = Array.isArray(detail.entries) ? detail.entries : [];
   state.remoteEntries = Array.isArray(detail.remoteEntries) ? detail.remoteEntries : [];
-  if (!state.user) {
-    state.weekly = [];
-    state.daily = [];
-    state.cacheLoaded = false;
-    loadingPromise = null;
-    reloadRequested = false;
-    return;
-  }
-  if (previousUid !== state.user.uid) state.cacheLoaded = false;
-  try { await loadData(); } catch (error) { console.error('시간 예산 데이터를 불러오지 못했습니다.', error); }
+  if (!state.user) return;
   renderActiveView();
+  await loadData();
+  if (state.ready && !state.loadError) ensureCurrentWeekSnapshot().catch(console.error);
 });
 
 document.addEventListener('weekly-time-budget:view-changed', async (event) => {
   state.activeView = event.detail?.view || state.activeView;
   if (!['dashboard', 'budget'].includes(state.activeView) || !state.user) return;
-  try { await loadData(); } catch { /* cached data remains */ }
   renderActiveView();
+  await loadData();
 });
 
 document.addEventListener('weekly-time-budget:entries-changed', async (event) => {
   if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
-  if (Array.isArray(event.detail?.entries)) state.entries = event.detail.entries;
-  else if (state.runtime) state.entries = await state.runtime.mergedEntries(state.remoteEntries);
-  if (state.activeView === 'dashboard') renderDashboard();
-  if (state.activeView === 'budget') renderBudget();
+  const context = sessionContext();
+  const entries = Array.isArray(event.detail?.entries) ? event.detail.entries
+    : await withTimeout(() => context.runtime.mergedEntries(state.remoteEntries)).catch(() => state.entries);
+  if (!context.current()) return;
+  state.entries = entries;
+  renderActiveView();
 });
 
-document.addEventListener('weekly-time-budget:data-changed', async () => {
-  if (!state.user) return;
-  try { await loadData(); } catch { /* cached data remains */ }
-  renderActiveView();
+document.addEventListener('weekly-time-budget:data-changed', async (event) => {
+  if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
+  state.dataSource?.invalidate?.(state.user.uid, 'budgets');
+  await loadData({ force: true });
+});
+
+window.addEventListener('online', () => {
+  if (state.user) { state.dataSource?.invalidate?.(state.user.uid); loadData({ force: true }).catch(console.error); }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && ['dashboard', 'budget'].includes(state.activeView)) loadData().catch(console.error);
 });

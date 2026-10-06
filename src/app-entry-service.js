@@ -1,3 +1,4 @@
+import { withTimeout } from './async-control.js';
 import { normalizeGoalType } from './goal-domain.js';
 
 export function createAppEntryService({
@@ -21,6 +22,7 @@ export function createAppEntryService({
     const runtime = getRuntime();
     const user = getUser();
     if (!runtime || !user) throw new Error('오프라인 저장소가 준비되지 않았습니다.');
+    const isCurrent = () => getUser()?.uid === user.uid && getRuntime() === runtime;
     const category = getCategories().find((item) => item.id === entry.categoryId);
     const normalizedEntry = {
       ...entry,
@@ -32,7 +34,9 @@ export function createAppEntryService({
         userId: user.uid,
         entry: normalizedEntry,
         onLocalSaved: async (record) => {
+          if (!isCurrent()) return;
           await refreshMergedEntries();
+          if (!isCurrent()) return;
           publishHistoryState();
           showToast({ type: 'queued', title: '✓ 기기에 안전하게 저장했습니다.', message: '서버 반영 상태를 확인하고 있습니다.' });
           dispatch('weekly-time-budget:entries-changed', {
@@ -43,16 +47,18 @@ export function createAppEntryService({
           await onLocalSaved?.(record);
         },
       });
+      if (!isCurrent()) return result;
       if (result.status === 'synced') {
         const remoteEntries = [{ ...result.entry, syncStatus: undefined }, ...getRemoteEntries().filter((item) => item.id !== result.localId)];
         setRemoteEntries(remoteEntries);
-        await runtime.store.patchSnapshot(user.uid, { entries: remoteEntries });
+        withTimeout(() => runtime.store.patchSnapshot(user.uid, { entries: remoteEntries }), 1500).catch(() => {});
       }
       await refreshMergedEntries();
+      if (!isCurrent()) return result;
       publishHistoryState();
       showEntrySaveResult(result);
       dispatch('weekly-time-budget:entries-changed', { userId: user.uid, entries: getEntries(), pendingCount: result.pendingCount });
-      dispatch('weekly-time-budget:data-changed');
+      dispatch('weekly-time-budget:data-changed', { userId: user.uid });
       return result;
     } catch (error) {
       showLocalSaveError();

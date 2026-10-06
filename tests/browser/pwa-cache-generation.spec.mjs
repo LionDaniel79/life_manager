@@ -19,7 +19,7 @@ test('구형 runtime과 셸 캐시는 최신 앱 파일보다 먼저 반환되�
   });
 
   await page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.register('/service-worker.js?app-build=2026.08.07-stability-v26', {
+    const registration = await navigator.serviceWorker.register('/service-worker.js?app-build=2026.10.06-loading-v27', {
       type: 'module',
       scope: '/',
       updateViaCache: 'none',
@@ -31,12 +31,12 @@ test('구형 runtime과 셸 캐시는 최신 앱 파일보다 먼저 반환되�
     await registration.update();
   });
 
-  const source = await page.evaluate(() => fetch('/src/statistics-bootstrap.js?v=26').then((response) => response.text()));
+  const source = await page.evaluate(() => fetch('/src/statistics-bootstrap.js?v=27').then((response) => response.text()));
   expect(source).not.toContain('stale-statistics-v13');
 
-  await page.goto('/index.html?app-build=2026.08.07-stability-v26');
+  await page.goto('/index.html?app-build=2026.10.06-loading-v27');
   await expect(page.locator('#cached-generation')).toHaveCount(0);
   await expect(page.locator('h1').first()).toHaveText('주간 시간 예산');
-  await expect(page.locator('html')).toHaveAttribute('data-app-build', '2026.08.07-stability-v26');
-  await expect(page.locator('[data-build-label]').first()).toContainText('v26');
+  await expect(page.locator('html')).toHaveAttribute('data-app-build', '2026.10.06-loading-v27');
+  await expect(page.locator('[data-build-label]').first()).toContainText('v27');
 });

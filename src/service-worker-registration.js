@@ -1,4 +1,4 @@
-const APP_BUILD = '2026.08.07-stability-v26';
+const APP_BUILD = '2026.10.06-loading-v27';
 const BUILD_KEY = 'weekly-time-budget:active-build';
 const RESET_KEY = `weekly-time-budget:reset:${APP_BUILD}`;
 
@@ -11,7 +11,8 @@ async function clearLegacyRuntime() {
 
   if ('serviceWorker' in navigator) {
     const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map((registration) => registration.unregister()));
+    const scope = new URL('./', window.location.href).href;
+    await Promise.all(registrations.filter((registration) => registration.scope === scope).map((registration) => registration.unregister()));
   }
   if ('caches' in globalThis) {
     const names = await caches.keys();

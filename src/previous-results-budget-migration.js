@@ -1,67 +1,33 @@
-import { getWeekRange, toDateKey } from './domain.js';
 import { filterCategoriesActiveOnDate } from './category-effective-date.js';
 import { buildPreviousWeekBudgetDefaults, previousSameWeekdayMinutes } from './time-budget-domain.js';
 
 const DEFAULT_SOURCE_VERSION = 'previous-results-v3';
-let runningFor = '';
-const completedRuns = new Set();
 
-async function migrateCurrentBudgets(detail = {}) {
-  const user = detail.user;
-  const dataSource = detail.dataSource;
-  const categories = Array.isArray(detail.categories) ? detail.categories : [];
-  const entries = Array.isArray(detail.entries) ? detail.entries : [];
-  if (!user?.uid || !dataSource?.loadTimeBudgetData || !dataSource?.ensureCurrentWeekBudget) return;
-
-  const today = toDateKey(new Date());
-  const weekStart = getWeekRange(new Date(`${today}T12:00:00`)).start;
-  const runKey = `${user.uid}:${weekStart}:${today}`;
-  if (runningFor === runKey || completedRuns.has(runKey)) return;
-  runningFor = runKey;
-
-  let changed = false;
-  try {
-    const data = await dataSource.loadTimeBudgetData(user.uid);
-    const currentWeek = (data.weeklyBudgets || []).find((item) => (item.weekStart || item.id) === weekStart);
-    const activeCategories = filterCategoriesActiveOnDate(categories, today);
-
-    if (currentWeek?.defaultSourceVersion !== DEFAULT_SOURCE_VERSION) {
-      const budgets = buildPreviousWeekBudgetDefaults({ categories: activeCategories, entries, weekStart });
-      await dataSource.ensureCurrentWeekBudget(user.uid, {
-        id: currentWeek?.id || weekStart,
-        weekStart,
-        budgets,
-        explicitBudgetIds: [],
-        initializedFromPreviousResults: true,
-        userModified: false,
-        defaultSourceVersion: DEFAULT_SOURCE_VERSION,
-      });
-      changed = true;
-    }
-
-    const currentDay = (data.dailyBudgets || []).find((item) => (item.date || item.id) === today);
-    if (currentDay?.defaultSourceVersion !== DEFAULT_SOURCE_VERSION && dataSource.saveDailyBudgetSnapshot) {
-      const overrides = Object.fromEntries(activeCategories.map((category) => [
-        category.id,
-        previousSameWeekdayMinutes(entries, category.id, today),
-      ]));
-      await dataSource.saveDailyBudgetSnapshot(user.uid, today, {
-        overrides,
-        userModified: false,
-        defaultSourceVersion: DEFAULT_SOURCE_VERSION,
-      });
-      changed = true;
-    }
-
-    completedRuns.add(runKey);
-    if (changed) document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
-  } catch (error) {
-    console.error('지난주 결과 기반 예산 마이그레이션 실패', error);
-  } finally {
-    runningFor = '';
-  }
+function needsDefaults(document, valuesKey) {
+  if (!document) return true;
+  if (document.userModified || document.defaultSourceVersion === DEFAULT_SOURCE_VERSION) return false;
+  if (document.initializedFromPreviousResults) return false;
+  if ((document.explicitBudgetIds || []).length) return false;
+  // Legacy documents with values may be manually entered, including explicit 0.
+  return Object.keys(document[valuesKey] || {}).length === 0;
 }
 
-document.addEventListener('weekly-time-budget:infrastructure-state', (event) => {
-  migrateCurrentBudgets(event.detail || {});
-});
+// Pure planning only: time-budget-feature is the sole owner of initialization.
+export function buildPreviousResultSnapshots({ categories = [], entries = [], weeklyBudgets = [], dailyBudgets = [], today, weekStart }) {
+  const currentWeek = weeklyBudgets.find((item) => (item.weekStart || item.id) === weekStart);
+  const currentDay = dailyBudgets.find((item) => (item.date || item.id) === today);
+  const activeCategories = filterCategoriesActiveOnDate(categories, today);
+  return {
+    weekly: needsDefaults(currentWeek, 'budgets') ? {
+      id: currentWeek?.id || weekStart, weekStart,
+      budgets: buildPreviousWeekBudgetDefaults({ categories: activeCategories, entries, weekStart }),
+      explicitBudgetIds: [], initializedFromPreviousResults: true,
+      userModified: false, defaultSourceVersion: DEFAULT_SOURCE_VERSION,
+    } : null,
+    daily: needsDefaults(currentDay, 'overrides') ? {
+      date: today,
+      overrides: Object.fromEntries(activeCategories.map((category) => [category.id, previousSameWeekdayMinutes(entries, category.id, today)])),
+      userModified: false, defaultSourceVersion: DEFAULT_SOURCE_VERSION,
+    } : null,
+  };
+}

@@ -1,11 +1,7 @@
+import { withTimeout } from './async-control.js';
+
 function plainDocuments(snapshot) {
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-}
-
-function timeoutAfter(milliseconds) {
-  return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('서버 응답이 늦어 기기에 저장된 자료를 표시합니다.')), milliseconds);
-  });
 }
 
 export function createStatisticsDataSource({
@@ -18,13 +14,13 @@ export function createStatisticsDataSource({
   async function readCache(userId) {
     const runtime = runtimeForUser(userId);
     if (!runtime) return null;
-    const snapshot = await runtime.store.getSnapshot(userId);
+    const snapshot = await withTimeout(() => runtime.store.getSnapshot(userId), timeoutMs);
     if (!snapshot) return null;
     const statistics = snapshot.statisticsData || {};
     const remoteEntries = Array.isArray(statistics.entries)
       ? statistics.entries : Array.isArray(snapshot.entries) ? snapshot.entries : [];
     const data = {
-      entries: await runtime.mergedEntries(remoteEntries),
+      entries: await withTimeout(() => runtime.mergedEntries(remoteEntries), timeoutMs),
       activeCategories: Array.isArray(statistics.activeCategories)
         ? statistics.activeCategories : Array.isArray(snapshot.categories) ? snapshot.categories : [],
       archivedCategories: Array.isArray(statistics.archivedCategories)
@@ -47,26 +43,26 @@ export function createStatisticsDataSource({
       firestore.getDocs(firestore.collection(db, ...root, 'archivedCategories')),
       firestore.getDocs(firestore.collection(db, ...root, 'weeklyBudgets')),
     ]);
-    const [entries, active, archived, weekly] = await Promise.race([request, timeoutAfter(timeoutMs)]);
+    const [entries, active, archived, weekly] = await withTimeout(request, timeoutMs, '서버 응답이 늦어 기기에 저장된 자료를 표시합니다.');
     const runtime = runtimeForUser(userId);
     const remoteEntries = plainDocuments(entries);
     const updatedAt = clock();
     const data = {
-      entries: runtime ? await runtime.mergedEntries(remoteEntries) : remoteEntries,
+      entries: runtime ? await withTimeout(() => runtime.mergedEntries(remoteEntries), timeoutMs) : remoteEntries,
       activeCategories: plainDocuments(active),
       archivedCategories: plainDocuments(archived),
       weeklyBudgets: plainDocuments(weekly),
     };
     if (runtime) {
-      await runtime.store.patchSnapshot(userId, {
+      withTimeout(() => runtime.store.patchSnapshot(userId, {
         statisticsData: { ...data, entries: remoteEntries, updatedAt },
-      });
+      }), Math.min(timeoutMs, 1500)).catch(() => {});
     }
     return { data, dataVersion: `server:${updatedAt}`, source: 'server', warning: '' };
   }
 
   async function load(userId, { onCache = () => {}, onServer = () => {} } = {}) {
-    const cached = await readCache(userId);
+    const cached = await withTimeout(() => readCache(userId), Math.min(timeoutMs, 1500)).catch(() => null);
     if (cached) await onCache(cached);
     try {
       const server = await readServer(userId);

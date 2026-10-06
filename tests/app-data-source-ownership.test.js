@@ -10,7 +10,7 @@ test('원격 대분류·기록 조회는 독립 app data source가 소유한다'
   ]);
   await access(new URL('../src/app-data-source.js', import.meta.url));
   assert.match(bootstrap, /createAppDataSource/);
-  assert.match(app, /dataSource\.loadUserData\(state\.user\.uid\)/);
+  assert.match(app, /dataSource\.loadUserData\(user\.uid\)/);
   assert.doesNotMatch(app, /firebase\.getDocs\(/);
   assert.doesNotMatch(app, /firebase\.query\(firebase\.collection/);
   assert.match(html, /src="\.\/src\/app\.js(?:\?v=\d+)?"/);

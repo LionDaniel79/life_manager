@@ -9,7 +9,7 @@ test('통계는 서버 조회가 멈춰도 사용자별 기기 스냅숏을 먼�
   assert.ok(source.includes('runtimeForUser(userId)'));
   assert.ok(source.includes('getSnapshot(userId)'));
   assert.ok(source.includes('mergedEntries'));
-  assert.match(source, /Promise\.race\(\[request, timeoutAfter\(timeoutMs\)\]\)/);
+  assert.match(source, /withTimeout\(request, timeoutMs/);
   assert.ok(source.includes('statisticsData'));
 });
 

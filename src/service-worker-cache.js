@@ -1,3 +1,5 @@
+import { withTimeout } from './async-control.js';
+
 const STATIC_IMPORT_PATTERN = /(?:\bimport\s*(?:[^'"()]*?\sfrom\s*)?|\bexport\s+[^'"()]*?\sfrom\s*|\bimport\s*\()(['"])([^'"]+)\1/g;
 
 export function extractModuleSpecifiers(source = '', baseUrl) {
@@ -41,4 +43,18 @@ export async function cacheModuleGraph({
   }
 
   return [...seen];
+}
+
+// The caller passes only the current build's cache. Never fall back across builds.
+export async function networkFirstWithDeadline({ request, cache, cacheKey = request, fetchFn = globalThis.fetch, timeoutMs = 3000 }) {
+  const controller = new AbortController();
+  try {
+    const response = await withTimeout(() => fetchFn(request, { cache: 'no-store', signal: controller.signal }), timeoutMs);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    await withTimeout(() => cache.put(cacheKey, response.clone()), 1000).catch(() => {});
+    return response;
+  } catch {
+    controller.abort();
+    return (await withTimeout(() => cache.match(cacheKey, { ignoreSearch: true }), 1000).catch(() => null)) || Response.error();
+  }
 }

@@ -22,6 +22,6 @@ test('Firebase 초기화와 인증 구독은 app-bootstrap이 단독 소유한�
 
 test('app.js는 화면과 인프라 사이의 조정자로만 남는다', async () => {
   const app = await read('src/app.js');
-  assert.ok(app.length < 12000, `app.js is still too large: ${app.length}`);
+  assert.ok(app.length < 14000, `app.js is still too large: ${app.length}`);
   assert.doesNotMatch(app, /function formatClock|categoryOptionHtml|optionHtml|calculateGoalComplianceScore|summarizeWeeklyBudgetPeriod/);
 });

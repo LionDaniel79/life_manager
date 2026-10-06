@@ -1,3 +1,5 @@
+import { withTimeout } from './async-control.js';
+import { createAppDataSource } from './app-data-source.js';
 import { firebaseConfig } from '../firebase-config.js';
 import { getWeekRange } from './domain.js';
 import { createPersistentTimerController, localDateKey } from './persistent-timer.js';
@@ -16,6 +18,7 @@ const store = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-
 const app = appModule.getApps().length ? appModule.getApp() : appModule.initializeApp(firebaseConfig);
 const auth = authModule.getAuth(app);
 const db = store.getFirestore(app);
+const sharedDataSource = createAppDataSource({ firebase: store, db });
 
 const LAST_CATEGORY_KEY = 'weekly-time-budget:last-timer-category';
 const state = {
@@ -44,15 +47,6 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => (
 }[char]));
 
 function storageKey(uid) { return `weekly-time-budget:active-timer:${uid}`; }
-
-function plainEntry(doc) {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    ...data,
-    createdAt: data.createdAt?.toMillis?.() ?? (Number(data.localCreatedAt || 0) || Date.now()),
-  };
-}
 
 function knownCategory(categoryId) {
   return state.categories.find((item) => item.id === categoryId)
@@ -91,13 +85,16 @@ function updatePreviewBaseline() {
 
 async function restoreCachedTimerData(user = state.user) {
   if (!user || !state.runtime) return false;
-  const cached = await state.runtime.store.getSnapshot(user.uid);
+  const runtime = state.runtime;
+  const cached = await withTimeout(() => runtime.store.getSnapshot(user.uid), 1500);
   if (!cached || state.user?.uid !== user.uid) return false;
   if (Array.isArray(cached.categories)) state.categories = cached.categories;
   if (Array.isArray(cached.archivedCategories)) state.archived = cached.archivedCategories;
   if (Array.isArray(cached.weeklyBudgets)) state.weekly = cached.weeklyBudgets;
   if (Array.isArray(cached.dailyBudgets)) state.daily = cached.dailyBudgets;
-  state.entries = await state.runtime.mergedEntries(Array.isArray(cached.entries) ? cached.entries : []);
+  const merged = await withTimeout(() => runtime.mergedEntries(Array.isArray(cached.entries) ? cached.entries : []), 1500);
+  if (state.user?.uid !== user.uid || state.runtime !== runtime) return false;
+  state.entries = merged;
   state.budgetReady = true;
   updatePreviewBaseline();
   return true;
@@ -109,32 +106,22 @@ async function refreshTimerData() {
   if (state.dataPromise && state.dataUserId === user.uid) return state.dataPromise;
 
   const promise = (async () => {
-    const hadCache = await restoreCachedTimerData(user) || state.budgetReady;
-    const root = ['users', user.uid];
+    const hadCache = await restoreCachedTimerData(user).catch(() => false) || state.budgetReady;
     try {
-      const [categories, archived, entries, weekly, daily] = await Promise.all([
-        store.getDocs(store.query(store.collection(db, ...root, 'categories'), store.orderBy('order'))),
-        store.getDocs(store.collection(db, ...root, 'archivedCategories')),
-        store.getDocs(store.query(store.collection(db, ...root, 'entries'), store.orderBy('date', 'desc'))),
-        store.getDocs(store.collection(db, ...root, 'weeklyBudgets')),
-        store.getDocs(store.collection(db, ...root, 'dailyBudgets')),
+      const [userData, budgetData] = await Promise.all([
+        sharedDataSource.loadUserData(user.uid), sharedDataSource.loadTimeBudgetData(user.uid),
       ]);
       if (state.user?.uid !== user.uid) return;
-      state.categories = categories.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      state.archived = archived.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      const remoteEntries = entries.docs.map(plainEntry);
-      state.entries = await state.runtime.mergedEntries(remoteEntries);
-      state.weekly = weekly.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      state.daily = daily.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const runtime = state.runtime;
+      const merged = await withTimeout(() => runtime.mergedEntries(userData.entries));
+      if (state.user?.uid !== user.uid || state.runtime !== runtime) return;
+      state.categories = userData.categories;
+      state.archived = userData.archivedCategories;
+      state.entries = merged;
+      state.weekly = budgetData.weeklyBudgets;
+      state.daily = budgetData.dailyBudgets;
       state.budgetReady = true;
-      await state.runtime.store.patchSnapshot(user.uid, {
-        categories: state.categories,
-        archivedCategories: state.archived,
-        entries: remoteEntries,
-        weeklyBudgets: state.weekly,
-        dailyBudgets: state.daily,
-        updatedAt: Date.now(),
-      });
+      // The app and budget feature own cache writes; a timer refresh is read-only.
     } catch (error) {
       if (!hadCache && !state.categories.length) throw error;
       console.warn('오프라인 타이머 예산 스냅숏 사용', error);
@@ -173,7 +160,7 @@ function configureController() {
     storageKey: storageKey(state.user.uid),
     remote: {
       async get() {
-        const snapshot = await store.getDoc(activeRef);
+        const snapshot = await withTimeout(() => store.getDoc(activeRef));
         return snapshot.exists() ? snapshot.data() : null;
       },
       async set(timer) {
@@ -653,11 +640,14 @@ authModule.onAuthStateChanged(auth, async (user) => {
     return;
   }
   try {
-    state.runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
+    const runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
+    if (state.user !== user) return;
+    state.runtime = runtime;
     state.selectedCategoryId = localStorage.getItem(LAST_CATEGORY_KEY) || '';
-    await restoreCachedTimerData(user);
+    await restoreCachedTimerData(user).catch(() => false);
+    if (state.user?.uid !== user.uid) return;
     configureController();
-    await refreshTimerFromRemote();
+    refreshTimerFromRemote().catch((error) => console.warn('타이머 원격 복구 지연', error));
     refreshTimerData().then(() => {
       if (state.user?.uid !== user.uid) return;
       if (timerTabIsActive()) renderTimer();
@@ -670,8 +660,8 @@ authModule.onAuthStateChanged(auth, async (user) => {
   schedulePatch();
 });
 
-document.addEventListener('weekly-time-budget:data-changed', async () => {
-  if (!state.user) return;
+document.addEventListener('weekly-time-budget:data-changed', async (event) => {
+  if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
   try { await refreshTimerData(); }
   catch (error) { console.error('타이머 예산 자료 갱신 실패', error); }
   if (timerTabIsActive()) renderTimer();
