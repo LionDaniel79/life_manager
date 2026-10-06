@@ -49,6 +49,9 @@ export function createStatisticsFeature({
   let requestSequence = 0;
   let lastRenderedSignature = '';
   let lastModel = null;
+  let invalidated = false;
+  let refreshRequested = false;
+  let lastLoadedAt = 0;
 
   function contextFor(currentState = state) {
     const current = now();
@@ -116,6 +119,7 @@ export function createStatisticsFeature({
       const endedAt = globalThis.performance?.now?.() ?? Date.now();
       const duration = Math.max(0, endedAt - startedAt);
       diagnostics.aggregateDurations.push(duration);
+      if (diagnostics.aggregateDurations.length > 120) diagnostics.aggregateDurations.shift();
       diagnostics.lastAggregateMs = duration;
       diagnostics.maxAggregateMs = Math.max(Number(diagnostics.maxAggregateMs) || 0, duration);
     }
@@ -201,7 +205,7 @@ export function createStatisticsFeature({
   async function load({ force = false } = {}) {
     const user = getCurrentUser();
     if (!user?.uid || destroyed) return null;
-    if (!force && loadedUserId === user.uid && state.data) {
+    if (!force && !invalidated && Date.now() - lastLoadedAt < 15000 && loadedUserId === user.uid && state.data) {
       render();
       return state.data;
     }
@@ -220,6 +224,7 @@ export function createStatisticsFeature({
       root.innerHTML = '<div class="card"><h2>통계를 불러오는 중…</h2><p class="muted">새 사용자의 자료를 확인하고 있습니다.</p></div>';
     }
     loadedUserId = user.uid;
+    invalidated = false;
     const sequence = ++requestSequence;
     if (!state.data) {
       root.innerHTML = '<div class="card"><h2>통계를 불러오는 중…</h2><p class="muted">기기에 저장된 자료를 확인하고 있습니다.</p></div>';
@@ -242,13 +247,20 @@ export function createStatisticsFeature({
           || finalSnapshot.source !== state.source)) {
         applySnapshot(finalSnapshot);
       }
+      lastLoadedAt = Date.now();
       return finalSnapshot;
     }).catch((error) => {
       if (sequence !== requestSequence || getCurrentUser()?.uid !== user.uid) return null;
       showFailure('통계 데이터 로드', error);
       return null;
     }).finally(() => {
-      if (loadingPromise === promise) loadingPromise = null;
+      if (loadingPromise === promise) {
+        loadingPromise = null;
+        if (refreshRequested && active && !destroyed) {
+          refreshRequested = false;
+          refresh().catch(() => {});
+        }
+      }
     });
     loadingPromise = promise;
     return promise;
@@ -360,8 +372,9 @@ export function createStatisticsFeature({
   }
 
   async function refresh() {
-    requestSequence += 1;
-    loadingPromise = null;
+    invalidated = true;
+    if (!active || destroyed) return null;
+    if (loadingPromise) { refreshRequested = true; return loadingPromise; }
     return load({ force: true });
   }
 

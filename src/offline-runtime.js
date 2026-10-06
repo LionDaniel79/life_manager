@@ -14,7 +14,7 @@ function browserEvent(name, detail) {
 }
 
 async function sharedStore() {
-  if (!storePromise) storePromise = createOfflineStore();
+  if (!storePromise) storePromise = createOfflineStore().catch((error) => { storePromise = null; throw error; });
   return storePromise;
 }
 
@@ -35,6 +35,9 @@ export async function getOfflineRuntime({
   }
 
   const store = await sharedStore();
+  // App and timer can both await the initial IndexedDB open; check again after it.
+  const initialized = runtimes.get(userId);
+  if (initialized) { if (onSyncResult) initialized.subscribe(onSyncResult); return initialized; }
   const remote = createFirestoreEntryRemote({ firestore, db });
   const repository = createOfflineEntryRepository({ store, remote });
   const subscribers = new Set();

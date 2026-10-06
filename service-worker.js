@@ -1,6 +1,6 @@
-import { cacheModuleGraph } from './src/service-worker-cache.js';
+import { cacheModuleGraph, networkFirstWithDeadline } from './src/service-worker-cache.js';
 
-const APP_BUILD = '2026.08.07-stability-v26';
+const APP_BUILD = '2026.10.06-loading-v27';
 const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
 // const SHELL_CACHE = 'weekly-time-budget-shell-v16';
 const RUNTIME_CACHE = 'weekly-time-budget-firebase-v2';
@@ -11,6 +11,7 @@ const SHELL_URLS = [
   './', './index.html', './styles.css', './src/mobile-compact.css', './src/statistics-primary.css',
   './manifest.webmanifest', './firebase-config.js', './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png',
   './src/category-effective-date.js', './src/goal-domain.js', './src/domain.js', './src/manual-entry.js',
+  './src/async-control.js',
   './src/app.js', './src/app-bootstrap.js', './src/app-data-source.js', './src/app-entry-service.js', './src/app-session-state.js',
   './src/auth-login-guard.js', './src/category-selection-memory.js',
   './src/category-delete-guard.js', './src/orphan-local-timer-cleanup.js', './src/previous-results-budget-migration.js',
@@ -46,24 +47,12 @@ async function firebaseCacheFirst(request) {
 
 async function sameOriginNetworkFirst(request) {
   const shell = await caches.open(SHELL_CACHE);
-  try {
-    const response = await fetch(request, { cache: 'no-store' });
-    if (response.ok) await shell.put(request, response.clone());
-    return response;
-  } catch {
-    return (await shell.match(request)) || Response.error();
-  }
+  return networkFirstWithDeadline({ request, cache: shell });
 }
 
 async function navigationNetworkFirst(request) {
   const shell = await caches.open(SHELL_CACHE);
-  try {
-    const response = await fetch(request, { cache: 'no-store' });
-    if (response.ok) await shell.put('./index.html', response.clone());
-    return response;
-  } catch {
-    return (await shell.match('./index.html')) || (await shell.match('./')) || Response.error();
-  }
+  return networkFirstWithDeadline({ request, cache: shell, cacheKey: './index.html' });
 }
 
 self.addEventListener('install', (event) => {

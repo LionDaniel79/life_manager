@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Run complete Node regression suite
+        run: npm test
+
       - name: Validate release modules
         run: |
           node --check src/app-shell.js
@@ -45,9 +48,9 @@ jobs:
 
       - name: Verify release source contracts
         run: |
-          grep -q '2026.08.07-stability-v26' index.html
-          grep -q '2026.08.07-stability-v26' service-worker.js
-          grep -q '앱 버전 v26' index.html
+          grep -q '2026.10.06-loading-v27' index.html
+          grep -q '2026.10.06-loading-v27' service-worker.js
+          grep -q '앱 버전 v27' index.html
           grep -q 'validWeekStart' src/statistics-state.js
           ! grep -q 'coerceRecordedPeriodSelection' src/statistics-state.js
           grep -q 'refreshQueued' src/statistics-bootstrap.js
@@ -67,13 +70,16 @@ jobs:
 
       - name: Verify deployed build contents
         run: |
-          grep -q '2026.08.07-stability-v26' _site/index.html
-          grep -q '2026.08.07-stability-v26' _site/service-worker.js
-          grep -q '앱 버전 v26' _site/index.html
+          grep -q '2026.10.06-loading-v27' _site/index.html
+          grep -q '2026.10.06-loading-v27' _site/service-worker.js
+          grep -q '앱 버전 v27' _site/index.html
           grep -q 'validWeekStart' _site/src/statistics-state.js
           grep -q 'refreshQueued' _site/src/statistics-bootstrap.js
           grep -q "closest?.('#mobile-menu')" _site/src/app-shell.js
           ! grep -q 'view-change-events.js' _site/index.html
+
+      - name: Record release identity
+        run: printf '{"commit":"%s","build":"2026.10.06-loading-v27"}\n' "$GITHUB_SHA" > _site/release.json
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -93,3 +99,22 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify live application build
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl -fsS --max-time 15 "${PAGE_URL}?verify=${GITHUB_SHA}" -o /tmp/live-index.html &&
+               grep -q '2026.10.06-loading-v27' /tmp/live-index.html &&
+               curl -fsS --max-time 15 "${PAGE_URL}src/time-budget-feature.js?verify=${GITHUB_SHA}" -o /tmp/live-budget.js &&
+               grep -q 'writeVersion' /tmp/live-budget.js &&
+               curl -fsS --max-time 15 "${PAGE_URL}release.json?verify=${GITHUB_SHA}" -o /tmp/live-release.json &&
+               grep -q "${GITHUB_SHA}" /tmp/live-release.json; then
+              echo "Live application verified: ${GITHUB_SHA}"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'The deployed build was not visible within the verification window.'
+          exit 1

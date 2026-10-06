@@ -1,3 +1,4 @@
+import { withTimeout } from './async-control.js';
 import {
   classifySyncError,
   createPendingEntry,
@@ -14,6 +15,7 @@ export function createOfflineEntryRepository({
   remote,
   createId = defaultCreateId,
   now = () => Date.now(),
+  syncTimeoutMs = 8000,
 } = {}) {
   if (!store || !remote?.save) throw new Error('오프라인 기록 저장소 설정이 필요합니다.');
 
@@ -30,18 +32,25 @@ export function createOfflineEntryRepository({
     return { kind, record: next };
   }
 
+  const inFlight = new Map();
   async function syncRecord(record) {
+    const key = `${record.userId}:${record.localId}`;
+    let operation = inFlight.get(key);
+    if (!operation) {
+      operation = Promise.resolve().then(() => remote.save(record));
+      inFlight.set(key, operation);
+      // Keep the same write in flight after a UI deadline. A later flush can
+      // acknowledge it without submitting the same transaction again.
+      operation.catch(() => { if (inFlight.get(key) === operation) inFlight.delete(key); });
+    }
     try {
-      await remote.save(record);
+      await withTimeout(operation, syncTimeoutMs);
       await store.deletePending(record.localId);
+      if (inFlight.get(key) === operation) inFlight.delete(key);
       return { status: 'synced', record };
     } catch (error) {
       const failure = await persistFailure(record, error);
-      return {
-        status: failure.kind === 'retryable' ? 'queued' : 'failed',
-        record: failure.record,
-        error,
-      };
+      return { status: failure.kind === 'retryable' ? 'queued' : 'failed', record: failure.record, error };
     }
   }
 
@@ -87,6 +96,7 @@ export function createOfflineEntryRepository({
         if (record.status === 'failed') continue;
         const result = await syncRecord(record);
         if (result.status === 'synced') syncedCount += 1;
+        if (result.status === 'queued') break; // Retry on reconnect; do not wait N deadlines offline.
       }
       const remaining = await store.getPending(userId);
       return {

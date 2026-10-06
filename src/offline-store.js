@@ -1,3 +1,5 @@
+import { withTimeout } from './async-control.js';
+
 export const OFFLINE_DB_SCHEMA = Object.freeze({
   name: 'weekly-time-budget-offline',
   version: 1,
@@ -20,8 +22,9 @@ function transactionToPromise(transaction) {
   });
 }
 
-function openDatabase(indexedDB, dbName) {
-  return new Promise((resolve, reject) => {
+function openDatabase(indexedDB, dbName, timeoutMs) {
+  let abandoned = false;
+  return withTimeout(new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName, OFFLINE_DB_SCHEMA.version);
 
     request.onupgradeneeded = () => {
@@ -48,10 +51,10 @@ function openDatabase(indexedDB, dbName) {
       }
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => { if (abandoned) request.result.close(); else resolve(request.result); };
     request.onerror = () => reject(request.error || new Error('오프라인 저장소를 열지 못했습니다.'));
     request.onblocked = () => reject(new Error('다른 앱 화면이 오프라인 저장소 갱신을 막고 있습니다.'));
-  });
+  }), timeoutMs, '기기 저장소 응답이 지연됩니다. 앱을 다시 열어 주세요.').catch((error) => { abandoned = true; throw error; });
 }
 
 function readStore(db, storeName) {
@@ -80,9 +83,10 @@ async function deleteValue(db, storeName, key) {
 export async function createOfflineStore({
   indexedDB = globalThis.indexedDB,
   dbName = OFFLINE_DB_SCHEMA.name,
+  openTimeoutMs = 8000,
 } = {}) {
   if (!indexedDB) throw new Error('이 브라우저에서는 오프라인 저장소를 사용할 수 없습니다.');
-  const db = await openDatabase(indexedDB, dbName);
+  const db = await openDatabase(indexedDB, dbName, openTimeoutMs);
 
   return {
     async putPending(record) {

@@ -13,7 +13,7 @@ test('대시보드 기록 기간은 시간 예산 기능의 local-first 기록�
     'previousRecordedPeriod',
     'nextRecordedPeriodOrCurrent',
     'coerceRecordedPeriodSelection',
-    'state.runtime.mergedEntries',
+    'context.runtime.mergedEntries',
   ]) assert.ok(source.includes(token), token);
 });
 

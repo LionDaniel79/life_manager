@@ -19,9 +19,11 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Run Node tests
-        run: npm test > test-output.txt 2>&1
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-output.txt
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
       - name: Run browser tests
         run: npm run test:browser
       - name: Prepare Pages artifact
@@ -45,6 +47,8 @@ jobs:
           test -f _site/src/time-budget-domain.js
           test -f _site/src/time-budget-ui.js
           test -f _site/src/time-budget-feature.js
+          test -f _site/src/async-control.js
+          test -f _site/src/previous-results-budget-migration.js
           test -f _site/src/record-feature.js
           test -f _site/src/history-feature.js
           test -f _site/src/category-feature.js

@@ -1,6 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'webkit', testMatch: ['**/runtime-loading.spec.mjs', '**/category-order-layout.spec.mjs'], use: { ...devices['Desktop Safari'] } },
+  ],
   testDir: './tests/browser',
   timeout: 20_000,
   expect: { timeout: 2_000 },

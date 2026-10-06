@@ -1,3 +1,4 @@
+import { createReadCache } from './async-control.js';
 import { normalizeGoalType } from './goal-domain.js';
 
 function plainEntry(doc) {
@@ -9,35 +10,46 @@ function plainEntry(doc) {
 
 const plainDocument = (doc) => ({ id: doc.id, ...doc.data() });
 
-export function createAppDataSource({ firebase, db }) {
+const sources = new WeakMap();
+
+export function createAppDataSource({ firebase, db, readTimeoutMs = 8000 }) {
   if (!firebase || !db) throw new Error('Firestore data source dependencies are required.');
+
+  if (sources.has(db)) return sources.get(db);
+  const reads = createReadCache({ timeoutMs: readTimeoutMs });
+  const getDocs = (ref) => (firebase.getDocsFromServer || firebase.getDocs)(ref);
 
   const userCollection = (userId, name) => firebase.collection(db, 'users', userId, name);
   const userDocument = (userId, collectionName, id) => firebase.doc(db, 'users', userId, collectionName, id);
 
-  return {
+  const source = {
+    invalidate(userId, scope = '') { reads.invalidate(`${userId}:${scope}`); },
     async loadUserData(userId) {
+      return reads.read(`${userId}:user`, async () => {
       const [categorySnapshot, archivedSnapshot, entrySnapshot] = await Promise.all([
-        firebase.getDocs(firebase.query(userCollection(userId, 'categories'), firebase.orderBy('order'))),
-        firebase.getDocs(userCollection(userId, 'archivedCategories')),
-        firebase.getDocs(firebase.query(userCollection(userId, 'entries'), firebase.orderBy('date', 'desc'))),
+        getDocs(firebase.query(userCollection(userId, 'categories'), firebase.orderBy('order'))),
+        getDocs(userCollection(userId, 'archivedCategories')),
+        getDocs(firebase.query(userCollection(userId, 'entries'), firebase.orderBy('date', 'desc'))),
       ]);
       return {
         categories: categorySnapshot.docs.map(plainDocument),
         archivedCategories: archivedSnapshot.docs.map(plainDocument),
         entries: entrySnapshot.docs.map(plainEntry),
       };
+      });
     },
 
     async loadTimeBudgetData(userId) {
+      return reads.read(`${userId}:budgets`, async () => {
       const [weeklySnapshot, dailySnapshot] = await Promise.all([
-        firebase.getDocs(userCollection(userId, 'weeklyBudgets')),
-        firebase.getDocs(userCollection(userId, 'dailyBudgets')),
+        getDocs(userCollection(userId, 'weeklyBudgets')),
+        getDocs(userCollection(userId, 'dailyBudgets')),
       ]);
       return {
         weeklyBudgets: weeklySnapshot.docs.map(plainDocument),
         dailyBudgets: dailySnapshot.docs.map(plainDocument),
       };
+      });
     },
 
     async ensureCurrentWeekBudget(userId, snapshot) {
@@ -144,4 +156,15 @@ export function createAppDataSource({ firebase, db }) {
       await firebase.deleteDoc(userDocument(userId, 'entries', entryId));
     },
   };
+  // A confirmed mutation invalidates every shared reader, including timer data.
+  for (const name of Object.keys(source).filter((name) => /^(save|ensure|archive|restore|delete)/.test(name))) {
+    const write = source[name];
+    source[name] = async (userId, ...args) => {
+      const result = await write(userId, ...args);
+      source.invalidate(userId);
+      return result;
+    };
+  }
+  sources.set(db, source);
+  return source;
 }

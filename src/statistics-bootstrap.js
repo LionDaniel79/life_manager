@@ -61,12 +61,13 @@ if (root) {
     feature.restore(event.detail?.statistics || {});
   });
 
-  document.addEventListener('weekly-time-budget:data-changed', () => {
-    if (!statisticsVisible() || refreshQueued) return;
+  document.addEventListener('weekly-time-budget:data-changed', (event) => {
+    if (event.detail?.userId && event.detail.userId !== auth.currentUser?.uid) return;
+    if (refreshQueued) return;
     refreshQueued = true;
     queueMicrotask(async () => {
       refreshQueued = false;
-      if (statisticsVisible()) await feature.refresh();
+      await feature.refresh();
     });
   });
 
@@ -74,6 +75,7 @@ if (root) {
     if (user) return;
     currentView = 'dashboard';
     feature.leave();
+    feature.refresh();
     root.innerHTML = '';
   });
 }

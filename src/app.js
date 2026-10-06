@@ -1,3 +1,4 @@
+import { withTimeout } from './async-control.js';
 import { createAppBootstrap } from './app-bootstrap.js';
 import { createAppEntryService } from './app-entry-service.js';
 import { createAppSessionState } from './app-session-state.js';
@@ -17,6 +18,7 @@ import { normalizeGoalType } from './goal-domain.js';
 const views = ['dashboard', 'record', 'budget', 'history', 'statistics', 'categories'];
 const state = {
   user: null,
+  userDataReady: false,
   categories: [],
   archivedCategories: [],
   entries: [],
@@ -35,6 +37,7 @@ let sessionState;
 let entryService;
 let loadingPromise = null;
 let reloadRequested = false;
+let sessionGeneration = 0;
 
 const $ = (selector) => document.querySelector(selector);
 const uiContext = () => ({
@@ -51,13 +54,18 @@ const allKnownCategories = () => {
 
 async function refreshMergedEntries() {
   if (!state.offlineRuntime || !state.user) return;
-  state.entries = await state.offlineRuntime.mergedEntries(state.remoteEntries);
+  const generation = sessionGeneration;
+  const entries = await withTimeout(() => state.offlineRuntime.mergedEntries(state.remoteEntries));
+  if (generation === sessionGeneration) state.entries = entries;
 }
 
 async function saveUiState(partial) {
   if (!sessionState) return;
-  state.uiState = await sessionState.persist(state.uiState, partial);
-  window.__weeklyTimeBudgetUiState = state.uiState;
+  const session = sessionState;
+  const next = await session.persist(state.uiState, partial);
+  if (session !== sessionState) return;
+  state.uiState = next;
+  window.__weeklyTimeBudgetUiState = next;
 }
 
 let bootstrap;
@@ -83,38 +91,41 @@ function publishInfrastructureState() {
       remoteEntries: state.remoteEntries,
       offlineRuntime: state.offlineRuntime,
       dataSource,
+      userDataReady: state.userDataReady,
     },
   }));
 }
 
 async function performLoadData() {
-  const { categories, archivedCategories, entries } = await dataSource.loadUserData(state.user.uid);
+  const user = state.user;
+  const runtime = state.offlineRuntime;
+  const generation = sessionGeneration;
+  const { categories, archivedCategories, entries } = await dataSource.loadUserData(user.uid);
+  const merged = await withTimeout(() => runtime.mergedEntries(entries));
+  if (sessionGeneration !== generation || state.user?.uid !== user.uid) return;
   state.categories = categories;
   state.archivedCategories = archivedCategories;
   state.remoteEntries = entries;
-  await refreshMergedEntries();
-  await state.offlineRuntime.store.patchSnapshot(state.user.uid, {
-    categories: state.categories,
-    archivedCategories: state.archivedCategories,
-    entries: state.remoteEntries,
-    updatedAt: Date.now(),
-  });
+  state.entries = merged;
+  state.userDataReady = true;
+  withTimeout(() => runtime.store.patchSnapshot(user.uid, {
+    categories, archivedCategories, entries, updatedAt: Date.now(),
+  }), 1500).catch((error) => console.warn('기기 스냅숏 저장 지연', error));
 }
 
 async function loadData() {
   if (!state.user) return;
-  if (loadingPromise) {
-    reloadRequested = true;
-    return loadingPromise;
-  }
-  loadingPromise = (async () => {
+  if (loadingPromise) { reloadRequested = true; return loadingPromise; }
+  const generation = sessionGeneration;
+  const promise = (async () => {
     do {
       reloadRequested = false;
       await performLoadData();
-    } while (reloadRequested && state.user);
+    } while (reloadRequested && state.user && generation === sessionGeneration);
   })();
-  try { await loadingPromise; }
-  finally { loadingPromise = null; }
+  loadingPromise = promise;
+  try { await promise; }
+  finally { if (loadingPromise === promise) loadingPromise = null; }
 }
 
 async function saveCategory({ id, name, goalType }) {
@@ -189,19 +200,24 @@ function createEntryService() {
 }
 
 async function handleSignedInUser({ user, db, storeModule }) {
+  const generation = sessionGeneration;
+  const isCurrent = () => generation === sessionGeneration && state.user?.uid === user.uid;
   try {
-    state.offlineRuntime = await getOfflineRuntime({
+    const runtime = await getOfflineRuntime({
       userId: user.uid,
       firestore: storeModule,
       db,
       onSyncResult: async (result) => {
+        if (!isCurrent()) return;
         showSyncResult(result);
         if (result.syncedCount > 0) {
-          try { await loadData(); renderAll(); }
-          catch { await refreshMergedEntries(); renderAll(); }
+          dataSource.invalidate?.(user.uid);
+          // The coordinator also emits data-changed; its shared load handles refresh.
         }
       },
     });
+    if (!isCurrent()) return;
+    state.offlineRuntime = runtime;
   } catch (error) {
     console.error('오프라인 저장소 초기화 실패', error);
     showLocalSaveError();
@@ -213,11 +229,13 @@ async function handleSignedInUser({ user, db, storeModule }) {
     userId: user.uid,
     uiContext,
     onSnapshot: (snapshot) => {
+      if (!isCurrent()) return;
       if (Array.isArray(snapshot?.categories)) state.categories = snapshot.categories;
       if (Array.isArray(snapshot?.archivedCategories)) state.archivedCategories = snapshot.archivedCategories;
       if (Array.isArray(snapshot?.entries)) state.remoteEntries = snapshot.entries;
     },
     onUiState: (uiState) => {
+      if (!isCurrent()) return;
       state.uiState = uiState;
       state.activeView = uiState.activeView;
       state.activeRecordTab = uiState.record.tab;
@@ -228,7 +246,8 @@ async function handleSignedInUser({ user, db, storeModule }) {
   });
   createEntryService();
 
-  const hadSnapshot = await sessionState.restore();
+  const hadSnapshot = await sessionState.restore().catch(() => false);
+  if (!isCurrent()) return;
   if (hadSnapshot) {
     renderAll();
     restoreVisibleState();
@@ -240,12 +259,21 @@ async function handleSignedInUser({ user, db, storeModule }) {
     if (hadSnapshot) showOfflineNotice();
     else showToast({ type: 'error', title: '데이터를 불러오지 못했습니다.', message: '온라인에서 한 번 실행한 뒤 오프라인 기록을 사용할 수 있습니다.' });
   }
+  if (!isCurrent()) return;
   renderAll();
   restoreVisibleState();
 }
 
 async function onUserChanged({ user, db, storeModule, dataSource: nextDataSource }) {
   const previousUid = state.user?.uid;
+  if (previousUid !== user?.uid) {
+    sessionGeneration += 1;
+    state.categories = []; state.archivedCategories = []; state.entries = []; state.remoteEntries = [];
+    state.userDataReady = false; loadingPromise = null; reloadRequested = false;
+    sessionState = null; entryService = null; state.offlineRuntime = null; state.uiState = null;
+    window.__weeklyTimeBudgetUiState = null;
+    if (previousUid) stopOfflineRuntime(previousUid);
+  }
   state.user = user;
   dataSource = nextDataSource;
   publishAuthState({ user });
@@ -336,8 +364,10 @@ document.addEventListener('weekly-time-budget:entries-changed', async (event) =>
   publishInfrastructureState();
   publishHistoryState();
 });
-document.addEventListener('weekly-time-budget:data-changed', async () => {
-  if (!state.user) return;
+document.addEventListener('weekly-time-budget:data-changed', async (event) => {
+  if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
+  if (event.detail?.scope === 'budgets') return;
+  dataSource.invalidate?.(state.user.uid);
   try { await loadData(); renderAll(); }
   catch { await refreshMergedEntries(); publishInfrastructureState(); }
 });

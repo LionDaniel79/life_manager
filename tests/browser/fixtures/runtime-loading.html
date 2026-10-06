@@ -1,0 +1,45 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/styles.css"></head>
+<body><main class="main-content"><h1 id="page-title"></h1><p id="week-label"></p><section id="budget-view"></section><section id="dashboard-view" class="hidden"></section><template id="empty-template"><p>대분류 없음</p></template></main>
+<script type="module">
+import { getWeekRange, toDateKey } from '/src/domain.js';
+import '/src/time-budget-feature.js';
+const date = toDateKey(new Date()); const week = getWeekRange().start;
+const mode = new URLSearchParams(location.search).get('mode') || 'hang';
+const data = (minutes = 120) => ({
+  weeklyBudgets: [{ weekStart: week, budgets: { reading: minutes * 7, video: 420 }, explicitBudgetIds: ['reading', 'video'], userModified: true, defaultSourceVersion: 'previous-results-v3' }],
+  dailyBudgets: [{ date, overrides: { reading: minutes, video: 60 }, userModified: true, defaultSourceVersion: 'previous-results-v3' }],
+});
+const h = globalThis.__loadingHarness = { reads: 0, writes: 0, initWrites: 0, patches: [], requests: [], saves: [], remote: { u1: data(), u2: data(300) }, serverMode: mode === 'ok' || mode === 'cache-error' || mode === 'init-hang' ? 'ok' : 'hang', uid: 'u1' };
+const emit = (name, detail) => document.dispatchEvent(new CustomEvent(`weekly-time-budget:${name}`, { detail }));
+const source = {
+  invalidate() {},
+  loadTimeBudgetData(uid) {
+    h.reads++;
+    if (mode === 'init-hang') return Promise.resolve({ weeklyBudgets: [], dailyBudgets: [] });
+    if (h.serverMode === 'ok') return Promise.resolve(structuredClone(h.remote[uid]));
+    return new Promise((resolve, reject) => h.requests.push({ uid, resolve, reject }));
+  },
+  ensureCurrentWeekBudget() { h.initWrites++; return new Promise(() => {}); },
+  saveDailyBudgetSnapshot() { h.initWrites++; return new Promise(() => {}); },
+  saveDailyBudget(uid, date, overrides) {
+    h.writes++;
+    return new Promise((resolve, reject) => h.saves.push({ resolve: () => {
+      h.remote[uid].dailyBudgets = [{ date, overrides, userModified: true, defaultSourceVersion: 'previous-results-v3' }]; resolve();
+    }, reject }));
+  },
+};
+h.emitUser = (uid) => {
+  h.uid = uid;
+  emit('infrastructure-state', { user: { uid }, userDataReady: true,
+    categories: [{ id: 'reading', name: uid === 'u1' ? '독서' : '새 사용자 독서' }, { id: 'video', name: '영상', goalType: 'restraint' }], entries: [], remoteEntries: [], dataSource: source,
+    offlineRuntime: { mergedEntries: async (entries) => entries, store: {
+      getSnapshot: async () => { if (mode === 'cache-error') throw Error('IndexedDB unavailable'); return mode === 'empty-cache' ? null : data(uid === 'u1' ? 120 : 300); },
+      patchSnapshot: async (userId, partial) => { h.patches.push({ userId, partial }); },
+    } },
+  });
+};
+h.resolveReads = () => { const requests = h.requests.splice(0); requests.forEach(({ uid, resolve }) => resolve(structuredClone(h.remote[uid]))); };
+h.show = (view) => { document.querySelector('#budget-view').classList.toggle('hidden', view !== 'budget'); document.querySelector('#dashboard-view').classList.toggle('hidden', view !== 'dashboard'); emit('view-changed', { view }); };
+h.noise = () => emit('entries-changed', { userId: h.uid, entries: [] });
+h.show('budget'); h.emitUser('u1'); h.ready = true;
+</script></body></html>
