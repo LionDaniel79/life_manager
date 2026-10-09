@@ -48,7 +48,7 @@ async function commit(change, replacement=null) {
   }
 }
 function open(html){dialog.innerHTML=html;if(!dialog.open)dialog.showModal();impact();}
-function impact(){const f=dialog.querySelector('[data-life-form="goal"]');if(!f)return;const date=f.elements.effectiveDate.value;const count=state.entries.filter(e=>e.date>=date).length;f.querySelector('#life-impact').textContent=`${date} 이후 기록 ${count}건이 있습니다. 연결된 활동·목표 기간에 맞는 기록만 반영됩니다. 여러 단기 목표가 겹치면 시간 메뉴에서 직접 배정합니다.`;}
+function impact(){const f=dialog.querySelector('[data-life-form="goal"]');if(!f)return;const date=f.elements.effectiveDate.value;const count=state.entries.filter(e=>e.date>=date).length;f.querySelector('#life-impact').textContent=`${date} 이후 기록 ${count}건이 있습니다. 연결된 활동·목표 기간에 맞는 기록만 반영됩니다. 여러 중기·단기 목표가 겹치면 시간 메뉴에서 직접 배정합니다.`;}
 function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 document.addEventListener('weekly-time-budget:infrastructure-state',event=>{

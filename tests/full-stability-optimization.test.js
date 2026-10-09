@@ -17,11 +17,11 @@ test('2단계: PWA는 최신 세대와 일회성 캐시 초기화를 사용한�
   const [worker, html, registration] = await Promise.all([
     read('service-worker.js'), read('index.html'), read('src/service-worker-registration.js'),
   ]);
-  assert.match(worker, /APP_BUILD = '2026\.10\.09-life-v28'/);
+  assert.match(worker, /APP_BUILD = '2026\.10\.09-life-v29'/);
   assert.match(worker, /navigationNetworkFirst/);
   assert.match(worker, /sameOriginNetworkFirst/);
-  assert.match(html, /data-app-build="2026\.10\.09-life-v28"/);
-  assert.match(html, /앱 버전 v28/);
+  assert.match(html, /data-app-build="2026\.10\.09-life-v29"/);
+  assert.match(html, /앱 버전 v29/);
   assert.match(registration, /getRegistrations/);
   assert.match(registration, /caches\.keys/);
   assert.match(registration, /updateViaCache: 'none'/);

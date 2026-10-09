@@ -33,3 +33,9 @@ Base: LionDaniel79/weekly-time-budget main eb183868a8e3301f18e5560da6298d58f020c
 - Ruling: production authentication/deployment is verified separately; synthetic browser flows cannot prove signed-in production access. Unchanged upstream functionality is covered by inherited regressions, private planning stays local.
 - GitHub CLI login approved by user and verified as LionDaniel79. life_manager changed to public with explicit source-publication authorization; Pages configured for GitHub Actions. Prototype branch is not an ancestor of the publishable branch.
 - Published 8804f232c3dbc6e74ee70f1810e780ce514a4f12 to origin/main; GitHub CI and Pages deployment succeeded. Live release.json matched, and production login shell loaded with no page errors or configuration warnings. No signed-in production data was modified during verification. Working checkout is now main tracking origin/main.
+
+## 2026-10-09 · Medium activity links and statistics bars
+
+The latest request permits direct time-category links on both medium and short goals. Medium goals can retain child short goals as well. A time entry has one selected direct target; overlapping candidates require explicit attribution, and each ancestor counts the source once. Historical effective dates and optional targets remain unchanged. Schema v1 is extended by accepting medium targets; old short links and backups remain valid.
+
+Category achievement in weekly, monthly and yearly statistics uses compact horizontal bars. Preserve the original scores and signed restraint meaning: negative excess uses red hatching and explicit excess text; over-100% growth retains the true percentage with a capped bar. No budget means excluded, never a fabricated zero. Version v29 refreshes the application cache.

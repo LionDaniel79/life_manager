@@ -1,9 +1,9 @@
-import { createState, apply, linkedShortGoals, localDate, validateState } from './domain.js';
+import { createState, apply, linkedActivityGoals, canLinkActivity, localDate, validateState } from './domain.js';
 
 export function resolveEntryGoal(s, entry) {
   const assigned = s.assignments?.find(a => a.entryId === entry.id);
   if (assigned) return assigned.goalId;
-  const choices = linkedShortGoals(s, entry.categoryId, entry.date);
+  const choices = linkedActivityGoals(s, entry.categoryId, entry.date);
   return choices.length === 1 ? choices[0].id : null;
 }
 
@@ -31,7 +31,7 @@ export function persistLife(s) {
 
 export function validateLife(s) {
   validateState(s);
-  if (!Array.isArray(s.assignments) || new Set(s.assignments.map(a=>a.entryId)).size !== s.assignments.length || !s.assignments.every(a=>typeof a.entryId==='string' && a.entryId.length > 0 && a.entryId.length <= 200 && (a.goalId===null || s.goals.some(g=>g.id===a.goalId && g.level==='short')))) throw Error('목표 배정 정보가 올바르지 않습니다.');
+  if (!Array.isArray(s.assignments) || new Set(s.assignments.map(a=>a.entryId)).size !== s.assignments.length || !s.assignments.every(a=>typeof a.entryId==='string' && a.entryId.length > 0 && a.entryId.length <= 200 && (a.goalId===null || s.goals.some(g=>g.id===a.goalId && canLinkActivity(g.level))))) throw Error('목표 배정 정보가 올바르지 않습니다.');
   return true;
 }
 
@@ -40,7 +40,7 @@ export function applyLife(state, action, today=localDate()) {
   if (action.type==='assignment.save') {
     s=structuredClone(state);
     const entry=s.entries.find(e=>e.id===action.entryId);
-    if (!entry || action.goalId && !linkedShortGoals(s,entry.categoryId,entry.date).some(g=>g.id===action.goalId)) throw Error('기록일에 연결된 단기 목표를 선택하세요.');
+    if (!entry || action.goalId && !linkedActivityGoals(s,entry.categoryId,entry.date).some(g=>g.id===action.goalId)) throw Error('기록일에 연결된 중기·단기 목표를 선택하세요.');
     s.assignments=s.assignments.filter(a=>a.entryId!==action.entryId);
     s.assignments.push({entryId:action.entryId,goalId:action.goalId || null});
   } else {

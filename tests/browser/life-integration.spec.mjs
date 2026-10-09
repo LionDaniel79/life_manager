@@ -50,3 +50,39 @@ test('a delayed goal refresh blocks writes until it completes and cannot roll ba
   await expect(page.locator('#life-goals [data-life="home.toggle"]')).toHaveText('오늘에 표시');
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('life-manager-goals:fixture')).revision)).toBe(2);
 });
+
+test('medium goal can link activities and a child together, assign once and reload',async({page})=>{
+  await open(page,390);await nav(page,'budget');
+  await newGoal(page,'장기 성장','long','','2');
+  await newGoal(page,'중기 성장','medium','장기 성장','2');
+  await newGoal(page,'단기 독서','short','중기 성장');
+  const card=page.locator('#life-goals .life-goal').filter({has:page.locator('strong').filter({hasText:'중기 성장'})});
+  await card.locator('[data-life="edit"]').click();
+  const dialog=page.locator('#life-dialog');
+  await dialog.getByLabel('독서',{exact:true}).check();
+  await dialog.getByLabel('단기 독서',{exact:true}).check();
+  await dialog.locator('[name="confirmLinks"]').check();
+  await dialog.locator('[name="confirmRetroactive"]').check();
+  await dialog.getByRole('button',{name:'저장',exact:true}).click();
+  await expect(dialog).not.toBeVisible();
+  await nav(page,'record');
+  await page.getByText('목표별 시간 배정 · 1건 선택 필요',{exact:true}).click();
+  const assignment=page.locator('[data-life-assignment="e1"]');
+  await expect(assignment.locator('option')).toHaveCount(3);
+  await assignment.selectOption({label:'단기 · 단기 독서'});
+  await nav(page,'dashboard');
+  for(const title of ['장기 성장','중기 성장']){
+    const goal=page.locator('#life-home .life-goal').filter({has:page.locator('strong').filter({hasText:title})});
+    await expect(goal).toContainText('50%');
+  }
+  await nav(page,'record');
+  await page.getByText('목표별 시간 배정 · 0건 선택 필요',{exact:true}).click();
+  await assignment.selectOption({label:'중기 · 중기 성장'});
+  await page.reload();await expect(page.locator('.life-sync')).toContainText('동기화 완료');
+  await nav(page,'dashboard');
+  const child=page.locator('#life-home .life-goal').filter({has:page.locator('strong').filter({hasText:'단기 독서'})});
+  await expect(child.locator('b')).toHaveText('0분');
+  const parent=page.locator('#life-home .life-goal').filter({has:page.locator('strong').filter({hasText:'중기 성장'})});
+  await expect(parent).toContainText('50%');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

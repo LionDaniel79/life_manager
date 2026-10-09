@@ -1,4 +1,4 @@
-import { LEVELS, PARENT, goalVersion, activeLink } from './domain.js';
+import { LEVELS, PARENT, goalVersion, activeLink, canLinkActivity } from './domain.js';
 import { esc, input, textarea, checkbox, option } from './ui.js';
 const select=(label,name,options)=>`<label>${label}<select name="${name}">${options}</select></label>`;
 const hidden=(name,value)=>`<input type="hidden" name="${name}" value="${esc(value)}">`;
@@ -8,7 +8,10 @@ export function linkFields(s,level,id,date) {
   const parent=links.find(l=>l.kind==='hierarchy'&&l.fromId===id)?.toId||'';
   const parents=s.goals.filter(g=>g.level===PARENT[level]&&goalVersion(g,date));
   const children=s.goals.filter(g=>PARENT[g.level]===level&&goalVersion(g,date));
-  return `${level==='life'?'':select('상위 목표','parentId',option('','연결하지 않음',parent)+parents.map(g=>option(g.id,goalVersion(g,date).title,parent)).join(''))}${level==='short'?`<fieldset><legend>연결할 활동 항목</legend>${s.categories.filter(c=>!c.archived).map(c=>checkbox(c.name,'categoryIds',false,c.id)).join('')}</fieldset>`:`<fieldset><legend>연결할 하위 목표</legend>${children.length?children.map(g=>checkbox(goalVersion(g,date).title,'childIds',false,g.id)).join(''):'<p class="muted">하위 목표를 만든 후 연결할 수 있습니다.</p>'}</fieldset>`}${checkbox('위에서 선택한 연결을 적용합니다','confirmLinks')}<p class="muted">수정 시 이 목표의 기존 직접 연결은 종료됩니다. 계속 사용할 하위 목표·활동도 다시 선택하세요. 하위 목표의 다른 연결은 유지됩니다.</p>`;
+  const parentField=level==='life'?'':select('상위 목표','parentId',option('','연결하지 않음',parent)+parents.map(g=>option(g.id,goalVersion(g,date).title,parent)).join(''));
+  const childFields=level==='short'?'':`<fieldset><legend>연결할 하위 목표</legend>${children.length?children.map(g=>checkbox(goalVersion(g,date).title,'childIds',false,g.id)).join(''):'<p class="muted">하위 목표를 만든 후 연결할 수 있습니다.</p>'}</fieldset>`;
+  const activityFields=canLinkActivity(level)?`<fieldset><legend>연결할 시간 기록 항목</legend>${s.categories.filter(c=>!c.archived).map(c=>checkbox(c.name,'categoryIds',false,c.id)).join('')||'<p class="muted">앱 설정에서 시간 기록 항목을 추가하세요.</p>'}<p class="muted">같은 항목이 여러 중기·단기 목표에 연결되면 시간 메뉴에서 반영할 목표를 선택합니다. 상위 목표에는 한 번만 합산됩니다.</p></fieldset>`:'';
+  return `${parentField}${childFields}${activityFields}${checkbox('위에서 선택한 연결을 적용합니다','confirmLinks')}<p class="muted">수정 시 이 목표의 기존 직접 연결은 종료됩니다. 계속 사용할 하위 목표·활동도 다시 선택하세요. 하위 목표의 다른 연결은 유지됩니다.</p>`;
 }
 export function goalForm(s,id,date) {
   const g=s.goals.find(g=>g.id===id),v=goalVersion(g,date)||{title:'',startDate:date,status:'active',kind:'achievement'},level=g?.level||'long';

@@ -133,3 +133,30 @@ test('3만 건 이상 자료의 월간 통계는 2초 안에 표시하고 집계
   const value = await snapshot(page);
   expect(value.diagnostics.maxAggregateMs).toBeLessThan(1_000);
 });
+
+test('achievement bars distinguish negative restraint and fit desktop and phone in all budget periods',async({page})=>{
+  await harness(page,'restraint');
+  await page.addStyleTag({url:'/styles.css'});
+  await page.addStyleTag({url:'/src/statistics-primary.css'});
+  const phone=page.locator('tr').filter({has:page.getByText('스마트폰 (절제)',{exact:true})});
+  await expect(phone.getByRole('img',{name:'스마트폰 (절제) 달성률 -33% · 초과 사용'})).toBeVisible();
+  await expect(phone.locator('.statistics-achievement')).toHaveClass(/is-overage/);
+  const archived=page.locator('tr').filter({has:page.getByText('보관 운동',{exact:true})});
+  await expect(archived.locator('[data-label="달성률"]')).toHaveText('달성률 계산 제외');
+  await expect(archived.locator('.statistics-achievement')).toHaveCount(0);
+  for(const width of [1200,390,320]){
+    await page.setViewportSize({width,height:900});
+    for(const mode of ['weekly','monthly','yearly']){
+      await page.locator(`button[data-statistics-mode="${mode}"]`).click();
+      const bars=page.locator('.statistics-achievement');
+      await expect(bars.first()).toBeVisible();
+      const sizes=await bars.evaluateAll(nodes=>nodes.map(node=>{
+        const track=node.querySelector('.statistics-achievement-track').getBoundingClientRect();
+        const fill=node.querySelector('.statistics-achievement-fill').getBoundingClientRect();
+        return {track:track.width,fill:fill.width};
+      }));
+      expect(sizes.every(s=>s.track>0&&s.fill>=0&&s.fill<=s.track+1)).toBe(true);
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    }
+  }
+});

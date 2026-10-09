@@ -227,6 +227,21 @@ function summaryCardsHtml(model) {
   </div>`;
 }
 
+function achievementBarHtml(row) {
+  if (!row.hasBudget || !Number.isFinite(row.percentage)) return '달성률 계산 제외';
+  const percentage = row.percentage;
+  const overage = row.goalType === 'restraint' && row.status === 'overage';
+  const exceeded = row.goalType !== 'restraint' && percentage > 100;
+  const status = overage ? '초과 사용' : exceeded ? '초과 달성' : '';
+  const label = `${row.name} 달성률 ${percentage}%${status ? ` · ${status}` : ''}`;
+  // Signed restraint scores keep their sign; red hatching visualizes the excess magnitude.
+  const width = Math.min(100, Math.abs(percentage));
+  return `<div class="statistics-achievement${overage ? ' is-overage' : ''}" role="img" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+    <span class="statistics-achievement-track" aria-hidden="true"><span class="statistics-achievement-fill" style="width:${width}%"></span></span>
+    <span class="statistics-achievement-label" aria-hidden="true"><span>${percentage}%</span>${status ? `<small>${status}</small>` : ''}</span>
+  </div>`;
+}
+
 function categoryTableHtml(model) {
   if (!model.summary) return '';
   const rows = model.categoryRows;
@@ -235,7 +250,7 @@ function categoryTableHtml(model) {
       <td data-label="대분류"><strong>${escapeHtml(row.name)}</strong></td>
       <td data-label="기간 예산">${formatMinutes(row.budgetMinutes)}</td>
       <td data-label="실제 기록">${formatMinutes(row.actualMinutes)}</td>
-      <td data-label="달성률">${row.hasBudget ? `${row.percentage}%` : '달성률 계산 제외'}</td>
+      <td data-label="달성률">${achievementBarHtml(row)}</td>
       <td data-label="차이">${differenceText(row)}</td>
     </tr>`).join('')}</tbody></table></div>` : '<div class="empty-statistics">해당 기간에 표시할 통계가 없습니다.</div>'}
   </div>`;

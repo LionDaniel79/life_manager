@@ -1,4 +1,4 @@
-import { LEVELS, goalVersion, goalSummary, activeLink, dailyGoalStatus, linkedShortGoals } from './domain.js';
+import { LEVELS, goalVersion, goalSummary, activeLink, dailyGoalStatus, linkedActivityGoals } from './domain.js';
 import { esc, duration, number, progress, option } from './ui.js';
 const status={active:'진행',paused:'잠시 멈춤',completed:'완료',archived:'보관'};
 export const action=(label,type,id='',css='secondary-button')=>`<button type="button" class="${css}" data-life="${type}" data-id="${esc(id)}">${label}</button>`;
@@ -12,7 +12,7 @@ export function home(s,date) {
   return `<div class="section-title"><h2>나의 목표</h2>${action('목표 설정','goals','','text-button')}</div>${s.homeGoalIds.length?`<div class="life-grid">${s.homeGoalIds.map(id=>goalCard(s,id,date)).join('')}</div>`:'<p class="life-notice">오늘 떠올리고 싶은 목표를 목표 설정에서 선택하세요.</p>'}`;
 }
 export function goals(s,date) {
-  return `<div class="section-title"><h2>삶의 방향과 목표</h2>${action('새 목표','new','','primary-button')}</div><p class="muted life-caption">생애 → 장기 → 중기 → 단기 → 활동 · 직접 연결한 항목의 시간이 목표에 쌓입니다.</p><div class="life-grid">${Object.keys(LEVELS).flatMap(level=>s.goals.filter(g=>g.level===level).map(g=>goalCard(s,g.id,date,true))).join('')||'<p>목표를 만들고 시간 기록 항목을 연결하세요.</p>'}</div><h2 class="life-budget-heading">일간·주간 시간 예산</h2>`;
+  return `<div class="section-title"><h2>삶의 방향과 목표</h2>${action('새 목표','new','','primary-button')}</div><p class="muted life-caption">생애 → 장기 → 중기 → 단기 · 시간 기록 항목은 중기·단기 목표에 직접 연결할 수 있습니다.</p><div class="life-grid">${Object.keys(LEVELS).flatMap(level=>s.goals.filter(g=>g.level===level).map(g=>goalCard(s,g.id,date,true))).join('')||'<p>목표를 만들고 시간 기록 항목을 연결하세요.</p>'}</div><h2 class="life-budget-heading">일간·주간 시간 예산</h2>`;
 }
 export function detail(s,id,date) {
   const g=s.goals.find(g=>g.id===id),v=goalVersion(g,date),r=goalSummary(s,id,date);
@@ -21,14 +21,14 @@ export function detail(s,id,date) {
 }
 export function attribution(s) {
   const rows=s.entries.map(entry=>{
-    const choices=linkedShortGoals(s,entry.categoryId,entry.date);
+    const choices=linkedActivityGoals(s,entry.categoryId,entry.date);
     const assignment=s.assignments.find(a=>a.entryId===entry.id);
     const invalid=Boolean(assignment?.goalId&&!choices.some(g=>g.id===assignment.goalId));
     return {entry,choices,assignment,invalid};
   }).filter(row=>row.choices.length>1||row.invalid).toReversed();
   if(!rows.length)return '';
   const pending=rows.filter(row=>!row.assignment||row.invalid).length;
-  return `<details class="card"><summary>목표별 시간 배정 · ${pending}건 선택 필요</summary><p class="muted">목표가 여러 개이거나 이전 연결이 바뀐 기록입니다. 반영할 목표를 직접 선택하세요. 원래 시간 기록은 유지됩니다.</p><div class="life-record-list">${rows.map(({entry:e,choices,invalid})=>`<label class="life-assignment">${e.date} · ${esc(e.categoryName)} · ${duration(e.durationMinutes)}<select data-life-assignment="${esc(e.id)}">${invalid?'<option value="__relink__" selected disabled>이전 연결 종료 · 다시 선택</option>':''}${option('','배정하지 않음',invalid?'__relink__':e.goalId||'')}${choices.map(g=>option(g.id,goalVersion(g,e.date).title,invalid?'__relink__':e.goalId)).join('')}</select></label>`).join('')}</div></details>`;
+  return `<details class="card"><summary>목표별 시간 배정 · ${pending}건 선택 필요</summary><p class="muted">목표가 여러 개이거나 이전 연결이 바뀐 기록입니다. 반영할 목표를 직접 선택하세요. 원래 시간 기록은 유지됩니다.</p><div class="life-record-list">${rows.map(({entry:e,choices,invalid})=>`<label class="life-assignment">${e.date} · ${esc(e.categoryName)} · ${duration(e.durationMinutes)}<select data-life-assignment="${esc(e.id)}">${invalid?'<option value="__relink__" selected disabled>이전 연결 종료 · 다시 선택</option>':''}${option('','배정하지 않음',invalid?'__relink__':e.goalId||'')}${choices.map(g=>option(g.id,`${LEVELS[g.level]} · ${goalVersion(g,e.date).title}`,invalid?'__relink__':e.goalId)).join('')}</select></label>`).join('')}</div></details>`;
 }
 export function statistics(s,date) {
   const current=s.goals.filter(g=>g.level!=='life'&&goalVersion(g,date));

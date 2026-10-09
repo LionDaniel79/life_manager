@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'], ...(process.env.PLAYWRIGHT_CHANNEL ? {channel:process.env.PLAYWRIGHT_CHANNEL} : {}) } },
-    { name: 'webkit', testMatch: ['**/runtime-loading.spec.mjs', '**/category-order-layout.spec.mjs'], use: { ...devices['Desktop Safari'] } },
+    { name: 'webkit', testMatch: ['**/runtime-loading.spec.mjs', '**/category-order-layout.spec.mjs', '**/life-integration.spec.mjs', '**/statistics-feature.spec.mjs'], use: { ...devices['Desktop Safari'] } },
   ],
   testDir: './tests/browser',
   timeout: 20_000,

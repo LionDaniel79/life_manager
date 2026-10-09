@@ -2,6 +2,7 @@ const DAY = 86400000;
 const OFFSET = 9 * 3600000;
 export const LEVELS = { life: '생애', long: '장기', medium: '중기', short: '단기' };
 export const PARENT = { long: 'life', medium: 'long', short: 'medium' };
+export const canLinkActivity = level => level === 'medium' || level === 'short';
 export function comparisonRange(from,to,mode='custom') {
   if(mode==='week') return {from:addDays(from,-7),to:addDays(to,-7)};
   if(mode==='month') {
@@ -42,11 +43,11 @@ export function createState(date = localDate()) {
 export function goalVersion(goal, date = localDate()) {
   return goal?.versions.filter(v => v.effectiveDate <= date).at(-1) ?? null;
 }
-export function linkedShortGoals(s, categoryId, date) {
+export function linkedActivityGoals(s, categoryId, date) {
   return s.links.filter(l => l.kind === 'activity' && l.fromId === categoryId && activeLink(l, date))
     .map(l => s.goals.find(g => g.id === l.toId)).filter(g => {
       const v = goalVersion(g, date);
-      return v && v.status === 'active' && inRange(date, v.startDate, v.endDate);
+      return canLinkActivity(g?.level) && v && v.status === 'active' && inRange(date, v.startDate, v.endDate);
     });
 }
 export function pathForEntry(s, entry) {
@@ -109,11 +110,11 @@ function saveEntry(s, a, allowArchived = false) {
   check(num(durationMinutes, 0, 1440) && a.durationMinutes !== '', '기록 시간은 0~1,440분으로 입력하세요.');
   let goalId = a.goalId;
   if (goalId === undefined) {
-    const choices = linkedShortGoals(s, category.id, a.date);
-    check(choices.length <= 1, '연결 가능한 단기 목표가 여러 개입니다. 하나를 선택하세요.');
+    const choices = linkedActivityGoals(s, category.id, a.date);
+    check(choices.length <= 1, '연결 가능한 중기·단기 목표가 여러 개입니다. 하나를 선택하세요.');
     goalId = choices[0]?.id ?? null;
   }
-  if (goalId) check(linkedShortGoals(s, category.id, a.date).some(g => g.id === goalId) || (existing?.goalId === goalId && existing.date === a.date && existing.categoryId === a.categoryId), '해당 날짜에 항목과 연결된 단기 목표를 선택하세요.');
+  if (goalId) check(linkedActivityGoals(s, category.id, a.date).some(g => g.id === goalId) || (existing?.goalId === goalId && existing.date === a.date && existing.categoryId === a.categoryId), '해당 날짜에 항목과 연결된 중기·단기 목표를 선택하세요.');
   upsert(s.entries, { id: a.id || uid(), categoryId: category.id, categoryName: existing?.categoryId === category.id ? existing.categoryName : category.name, date: a.date, durationMinutes, goalId: goalId || null, note: clean(a.note), source: a.source || existing?.source || 'manual', startTime: a.startTime || '', endTime: a.endTime || '', updatedAt: new Date().toISOString() });
 }
 
@@ -153,7 +154,7 @@ function saveGoal(s, a, today) {
   for (const categoryId of new Set(a.categoryIds || [])) open('activity', categoryId, id);
   if (a.includeUnassigned) {
     check(a.confirmRetroactive, '기존 미연결 기록을 포함할지 확인하세요.');
-    for (const e of s.entries) if (!e.goalId && e.date >= a.effectiveDate && linkedShortGoals(s, e.categoryId, e.date).some(g => g.id === id)) e.goalId = id;
+    for (const e of s.entries) if (!e.goalId && e.date >= a.effectiveDate && linkedActivityGoals(s, e.categoryId, e.date).some(g => g.id === id)) e.goalId = id;
   }
   if (a.showHome === true && !s.homeGoalIds.includes(id)) s.homeGoalIds.push(id);
   if (a.showHome === false) s.homeGoalIds = s.homeGoalIds.filter(x => x !== id);
@@ -238,7 +239,7 @@ export function apply(state, action, today = localDate()) {
       }
       check([...sums.values()].reduce((x,y) => x+y,0) >= 1000, '1초 이상 기록한 후 저장하세요.');
       for (const [date, ms] of sums) {
-        const goalId = t.goalId && linkedShortGoals(s,t.categoryId,date).some(g => g.id === t.goalId) ? t.goalId : null;
+        const goalId = t.goalId && linkedActivityGoals(s,t.categoryId,date).some(g => g.id === t.goalId) ? t.goalId : null;
         saveEntry(s, { id: `${t.id}:${date}`, categoryId: t.categoryId, goalId, date, durationMinutes: Math.round(ms / 600) / 100, note: t.note, source: 'timer' }, true);
       }
       s.timer = null; break;
@@ -274,7 +275,7 @@ export function validateState(s) {
   }
   for (const l of s.links) {
     check(validDate(l.validFrom) && (l.validTo === null || validDate(l.validTo) && l.validTo >= l.validFrom), '연결 적용 날짜가 잘못되었습니다.');
-    check(l.kind === 'activity' ? cat(l.fromId) && goal(l.toId)?.level === 'short' : l.kind === 'hierarchy' && goal(l.fromId) && goal(l.toId) && PARENT[goal(l.fromId).level] === goal(l.toId).level, '목표는 생애–장기–중기–단기–활동 순서로 연결하세요.');
+    check(l.kind === 'activity' ? cat(l.fromId) && canLinkActivity(goal(l.toId)?.level) : l.kind === 'hierarchy' && goal(l.fromId) && goal(l.toId) && PARENT[goal(l.fromId).level] === goal(l.toId).level, '목표는 생애–장기–중기–단기 순서로, 시간 기록 항목은 중기·단기 목표에 연결하세요.');
   }
   const overlap = (a,b) => a.validFrom < (b.validTo || '9999') && b.validFrom < (a.validTo || '9999') && a.validFrom !== a.validTo && b.validFrom !== b.validTo;
   for (let i=0;i<s.links.length;i++) for (let j=i+1;j<s.links.length;j++) {
@@ -282,13 +283,13 @@ export function validateState(s) {
     if (a.kind === b.kind && a.fromId === b.fromId && (a.kind === 'hierarchy' || a.toId === b.toId)) check(!overlap(a,b), '동일한 기간에 중복 연결할 수 없습니다.');
   }
   const timestamp = value => text(value,80) && Number.isFinite(Date.parse(value));
-  for (const e of s.entries) check(cat(e.categoryId) && validDate(e.date) && num(e.durationMinutes,0,1440) && (!e.goalId || goal(e.goalId)?.level === 'short') && text(e.note) && text(e.categoryName,80) && timestamp(e.updatedAt) && ['manual','timer','range'].includes(e.source) && text(e.startTime,5) && text(e.endTime,5), '시간 기록의 날짜·항목·분·목표·수정시각을 확인하세요.');
+  for (const e of s.entries) check(cat(e.categoryId) && validDate(e.date) && num(e.durationMinutes,0,1440) && (!e.goalId || canLinkActivity(goal(e.goalId)?.level)) && text(e.note) && text(e.categoryName,80) && timestamp(e.updatedAt) && ['manual','timer','range'].includes(e.source) && text(e.startTime,5) && text(e.endTime,5), '시간 기록의 날짜·항목·분·목표·수정시각을 확인하세요.');
   for (const b of s.budgets) check(cat(b.categoryId) && validDate(b.week) && num(b.minutes,0,10080), '시간 예산은 0~10,080분으로 입력하세요.');
   for (const r of s.results) check(goal(r.goalId) && validDate(r.date) && num(r.value) && text(r.metricKey,160) && r.metricKey.length>0 && text(r.note) && timestamp(r.updatedAt), '결과 측정 형식이 잘못되었습니다.');
   for (const w of s.weights) check(validDate(w.date) && num(w.kg,1,500) && text(w.note), '체중은 실제 측정한 1~500kg 값을 입력하세요.');
   for (const r of s.reviews) check(validDate(r.date) && text(r.keep) && text(r.adjust) && text(r.next) && num(r.revision) && Array.isArray(r.snapshot) && r.snapshot.every(g=>g && text(g.id,160) && text(g.title,120) && num(g.minutes) && (g.targetMinutes===null || num(g.targetMinutes,0.01))), '점검과 당시 목표 정보의 형식이 잘못되었습니다.');
   check(Array.isArray(s.homeGoalIds) && new Set(s.homeGoalIds).size === s.homeGoalIds.length && s.homeGoalIds.every(id => goal(id)), '메인 목표 목록이 잘못되었습니다.');
   check(s.settings && [0,1].includes(s.settings.weekStartsOn) && num(s.settings.defaultMinutes,1,1440), '앱 설정이 잘못되었습니다.');
-  if (s.timer) check(text(s.timer.id,160) && s.timer.id.length>0 && cat(s.timer.categoryId) && (!s.timer.goalId || goal(s.timer.goalId)?.level === 'short') && num(s.timer.createdAt,1,1e14) && (s.timer.runningSince === null || num(s.timer.runningSince,1,1e14)) && Array.isArray(s.timer.intervals) && s.timer.intervals.every(i => Array.isArray(i) && i.length === 2 && num(i[0],1,1e14) && num(i[1],i[0],1e14)) && text(s.timer.note), '타이머 저장 정보가 잘못되었습니다.');
+  if (s.timer) check(text(s.timer.id,160) && s.timer.id.length>0 && cat(s.timer.categoryId) && (!s.timer.goalId || canLinkActivity(goal(s.timer.goalId)?.level)) && num(s.timer.createdAt,1,1e14) && (s.timer.runningSince === null || num(s.timer.runningSince,1,1e14)) && Array.isArray(s.timer.intervals) && s.timer.intervals.every(i => Array.isArray(i) && i.length === 2 && num(i[0],1,1e14) && num(i[1],i[0],1e14)) && text(s.timer.note), '타이머 저장 정보가 잘못되었습니다.');
   return true;
 }
