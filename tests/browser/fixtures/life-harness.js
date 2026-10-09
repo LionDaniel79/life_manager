@@ -14,7 +14,7 @@ const h=window.__lifeHarness={date,failLoad:false,saves:0,entries:[{id:'e1',date
 const budgets={weeklyBudgets:[{weekStart:week,budgets:{reading:420,phone:210},explicitBudgetIds:['reading','phone'],userModified:true,defaultSourceVersion:'previous-results-v3'}],dailyBudgets:[{date,overrides:{reading:60,phone:30},userModified:true,defaultSourceVersion:'previous-results-v3'}]};
 let goalData=JSON.parse(localStorage.getItem('life-test-state')||'null');
 const source={
-  async loadLifeData(){if(h.failLoad)throw Error('offline');return structuredClone(goalData);},
+  async loadLifeData(){h.loadCalls=(h.loadCalls||0)+1;if(h.failLoad)throw Error('offline');const snapshot=structuredClone(goalData);if(h.deferLoad)return new Promise(resolve=>(h.pendingLoads||=[]).push(()=>resolve(snapshot)));return snapshot;},
   async saveLifeData(uid,state,expected){if(expected!==(goalData?.revision||0))throw Error('다른 화면에서 목표가 변경되었습니다.');goalData={...structuredClone(state),entries:[],budgets:[],timer:null,revision:expected+1};localStorage.setItem('life-test-state',JSON.stringify(goalData));h.saves++;return structuredClone(goalData);},
   async loadTimeBudgetData(){return structuredClone(budgets);},invalidate(){},
   async ensureCurrentWeekBudget(){},async saveDailyBudgetSnapshot(){},

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createState, apply, goalSummary } from '../src/life/domain.js';
 import { hydrateLife, persistLife, applyLife, resolveEntryGoal } from '../src/life/model.js';
+import { attribution, goalCard } from '../src/life/views.js';
 
 const date = '2026-10-09';
 const infra = { categories: [{ id: 'reading', name: '독서', order: 1 }], entries: [{ id: 'e1', categoryId: 'reading', date, durationMinutes: 60 }] };
@@ -38,4 +39,18 @@ test('persisted goal state never includes time entries, budgets or timer',()=>{
   const s=linked(); s.timer={secret:'original timer'}; s.budgets=[{secret:'time budget'}];
   const p=persistLife(s);
   assert.equal(p.entries.length,0); assert.equal(p.budgets.length,0); assert.equal(p.timer,null);
+});
+test('an invalid explicit assignment stays visible for correction after relinking leaves one eligible goal',()=>{
+  let s=linked();
+  const second={type:'goal.save',id:'s2',level:'short',title:'second',effectiveDate:date,startDate:date,parentId:'m',categoryIds:['reading']};
+  s=applyLife(s,second,date);s=applyLife(s,{type:'assignment.save',entryId:'e1',goalId:'s2'},date);
+  s=applyLife(s,{...second,categoryIds:[]},date);
+  assert.equal(goalSummary(s,'l',date).minutes,0);
+  assert.match(attribution(s),/data-life-assignment="e1"/);
+  s=applyLife(s,{type:'assignment.save',entryId:'e1',goalId:'s'},date);
+  assert.equal(goalSummary(s,'l',date).minutes,60);
+});
+test('daily goal label never attributes an earlier day to today',()=>{
+  let s=linked();s=applyLife(s,{type:'goal.save',id:'s',level:'short',title:'s',effectiveDate:date,startDate:date,endDate:date,dailyMinutes:30,categoryIds:['reading']},date);
+  assert.match(goalCard(s,'s','2026-10-10'),/오늘 실행 0분/);
 });

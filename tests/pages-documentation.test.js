@@ -33,7 +33,7 @@ test('README는 필요한 Firebase 저장소 변수와 승인 도메인을 모�
 
 test('README는 일반 배포 흐름과 실패 확인 및 롤백을 설명한다', async () => {
   const source = await readme();
-  assert.match(source, /agent\/build-mvp/);
+  assert.match(source, /feature\/upstream-goals/);
   assert.match(source, /git revert/);
   assert.match(source, /Actions/);
   assert.match(source, /Spark/);

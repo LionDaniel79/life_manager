@@ -24,3 +24,11 @@ Base: LionDaniel79/weekly-time-budget main eb183868a8e3301f18e5560da6298d58f020c
 - Prototype saved locally; upstream history fetched; feature/upstream-goals created, including original life_manager initial commit.
 - Baseline test discovery initially included ignored archives; narrowing the command to the maintained tests is required.
 - GitHub connector can write code. Terminal Git authentication is unavailable; browser/native UI tools currently fail to initialize. Pages configuration remains to be resolved.
+
+## Final verification and rulings
+
+- 385 Node tests and 39 Chromium/WebKit browser tests passed after fixes; application-only build succeeded.
+- Independent review found duplicate production shell imports, stale refresh overwrites, and unrepairable stale attribution. Reproduction tests failed first; all fixed and full suites rerun.
+- Ruling: an earlier day's execution shown as today's is treated as an accuracy defect rather than cosmetic polish; corrected with a date-specific regression test.
+- Ruling: production authentication/deployment is verified separately; synthetic browser flows cannot prove signed-in production access. Unchanged upstream functionality is covered by inherited regressions, private planning stays local.
+- GitHub CLI login approved by user and verified as LionDaniel79. life_manager changed to public with explicit source-publication authorization; Pages configured for GitHub Actions. Prototype branch is not an ancestor of the publishable branch.

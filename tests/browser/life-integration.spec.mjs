@@ -29,3 +29,23 @@ test('mobile layout, account isolation, and offline goal editing protection',asy
   await page.evaluate(()=>{__lifeHarness.failLoad=true;window.dispatchEvent(new Event('online'));});await expect(page.locator('.life-sync')).toContainText('불러오지 못했습니다');await expect(page.locator('[data-life="new"]')).toBeDisabled();
   await page.evaluate(()=>__lifeHarness.switchUser('different'));await expect(page.locator('#life-goals')).not.toContainText('작은 목표');
 });
+test('real index loads one mobile menu handler, including its production module URLs',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.route('https://**/*',r=>r.abort());
+  await page.route('**/src/service-worker-registration.js*',r=>r.fulfill({contentType:'text/javascript',body:''}));
+  await page.goto('/index.html');await page.waitForFunction(()=>document.querySelector('#life-dialog'));
+  await page.evaluate(()=>{document.querySelector('#login-view').classList.add('hidden');document.querySelector('#app-view').classList.remove('hidden');});
+  await page.locator('#mobile-menu').click();await expect(page.locator('.sidebar')).toHaveClass(/open/);
+  await page.locator('nav [data-view="budget"]').click();await expect(page.locator('#life-goals')).toBeVisible();
+});
+test('a delayed goal refresh blocks writes until it completes and cannot roll back confirmed edits',async({page})=>{
+  await open(page);await nav(page,'budget');await newGoal(page,'갱신 확인','long');
+  await page.evaluate(()=>{__lifeHarness.deferLoad=true;window.dispatchEvent(new Event('online'));});
+  await page.waitForFunction(()=>__lifeHarness.pendingLoads?.length===1);
+  await expect(page.locator('#life-goals [data-life="home.toggle"]')).toBeDisabled();
+  await page.evaluate(()=>{__lifeHarness.deferLoad=false;__lifeHarness.pendingLoads.shift()();});
+  await expect(page.locator('#life-goals [data-life="home.toggle"]')).toBeEnabled();
+  await page.locator('#life-goals [data-life="home.toggle"]').click();
+  await expect(page.locator('#life-goals [data-life="home.toggle"]')).toHaveText('오늘에 표시');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('life-manager-goals:fixture')).revision)).toBe(2);
+});

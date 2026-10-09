@@ -3,7 +3,6 @@ import { hydrateLife, persistLife, applyLife, validateLife } from './model.js';
 import { goalForm, linkFields, weightForm, resultForm, reviewForm } from './forms.js';
 import { home, goals, detail, attribution, statistics, settings, action } from './views.js';
 import { esc } from './ui.js';
-import { switchView } from '../app-shell.js';
 import { showToast } from '../app-toast.js';
 
 let infra={}, saved=null, state=hydrateLife(null), userId=null, ready=false, busy=false, loading=false, generation=0, notice='';
@@ -19,20 +18,22 @@ function render() {
   const html=[home(state,date),goals(state,date),attribution(state),statistics(state,date),settings()];
   panels.forEach((id,i)=>{const el=document.getElementById(id);if(el)el.innerHTML=html[i];});
   document.querySelectorAll('.life-sync').forEach(el=>{el.innerHTML=`<span role="status">${esc(busy?'목표 저장 중…':loading?'목표 불러오는 중…':notice||'목표 동기화 완료')}</span>${!ready&&!loading?action('다시 불러오기','refresh','','text-button'):''}`;});
-  document.querySelectorAll('[data-life]:not([data-life="refresh"]):not([data-life="close"]):not([data-life="goals"]):not([data-life="detail"]):not([data-life="backup"]):not([data-life="export-all"]), [data-life-assignment]').forEach(el=>{el.disabled=!ready||busy;});
+  document.querySelectorAll('[data-life]:not([data-life="refresh"]):not([data-life="close"]):not([data-life="goals"]):not([data-life="detail"]):not([data-life="backup"]):not([data-life="export-all"]), [data-life-assignment]').forEach(el=>{el.disabled=!ready||busy||loading;});
+  document.querySelectorAll('[data-life="refresh"]').forEach(el=>{el.disabled=busy||loading;});
 }
 async function refresh() {
-  if (!userId||!infra.dataSource?.loadLifeData||loading) return;
+  if (!userId||!infra.dataSource?.loadLifeData||loading||busy) return;
   const current=userId,token=generation; loading=true; render();
   try {
     const remote=await infra.dataSource.loadLifeData(current);
     if(current!==userId||token!==generation)return;
+    if((remote?.revision||0)<(saved?.revision||0))throw Error('확인한 저장보다 이전 자료를 받았습니다. 잠시 후 다시 불러와 주세요.');
     saved=remote; ready=true; notice=''; if(saved)cache();
   }catch(error){if(current===userId&&token===generation){ready=false;notice=`목표를 불러오지 못했습니다. ${error.message} 저장된 목표를 읽기만 할 수 있습니다.`;}}
   finally{if(current===userId&&token===generation){loading=false;render();}}
 }
 async function commit(change, replacement=null) {
-  if(!ready||!userId)throw Error('목표를 새로 불러온 후 인터넷에 연결된 상태에서 저장하세요.');
+  if(!ready||!userId||loading)throw Error('목표를 새로 불러온 후 인터넷에 연결된 상태에서 저장하세요.');
   if(busy)throw Error('이전 저장을 마친 뒤 다시 시도하세요.');
   const current=userId,token=generation,expected=state.revision;
   const next=replacement||applyLife(state,change);
@@ -62,7 +63,7 @@ document.addEventListener('click',async event=>{
   const type=b.dataset.life,id=b.dataset.id,date=localDate();
   try{
     if(type==='close'){dialog.close();return;}
-    if(type==='goals'){switchView('budget');return;}
+    if(type==='goals'){document.querySelector('nav [data-view="budget"]')?.click();return;}
     if(type==='refresh'){await refresh();return;}
     if(type==='new'){open(goalForm(state,'',date));return;}
     if(type==='edit'){open(goalForm(state,id,date));return;}
