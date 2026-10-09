@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "주간 시간 예산",
-  "short_name": "시간 예산",
-  "description": "주간 시간 예산과 실제 사용 시간을 기록하고 비교하는 웹앱",
+  "name": "Life Manager",
+  "short_name": "Life Manager",
+  "description": "시간 기록을 삶의 목표와 연결하는 웹앱",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

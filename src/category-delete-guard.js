@@ -1,6 +1,7 @@
 import { firebaseConfig } from '../firebase-config.js';
 import { removeUnknownCategoryReferences } from './time-budget-domain.js';
 import { getOfflineRuntime } from './offline-runtime.js';
+import { categoryHasReferences } from './life/category-guard.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -214,6 +215,7 @@ async function openChoice(categoryId, categoryName) {
     entryCount(user, categoryId),
     runtime.store.countPendingByCategory(user.uid, categoryId),
   ]);
+  const protectedCategory = await hasSavedReferences(user, categoryId, count, pendingCount);
   const dialog = showDialog(`
     <h2>${esc(categoryName)} 처리</h2>
     <p>완전히 삭제하거나 보관할 수 있습니다.</p>
@@ -224,8 +226,9 @@ async function openChoice(categoryId, categoryName) {
     <div class="delete-guard-actions">
       <button type="button" class="secondary-button" data-action="cancel">취소</button>
       <button type="button" class="delete-guard-archive" data-action="archive">보관</button>
-      <button type="button" class="danger-button" data-action="delete">삭제</button>
-    </div>`);
+      <button type="button" class="danger-button" data-action="delete" ${protectedCategory ? 'disabled title="사용 이력이 있는 항목은 보관하세요"' : ''}>삭제</button>
+  </div>`);
+  if (protectedCategory) dialog.querySelector('.delete-guard-warning').textContent = '시간 기록·예산·타이머·목표 연결에 사용한 항목입니다. 보관하면 과거 기록과 목표 연결은 유지되고 새 기록에서 숨겨집니다.';
 
   dialog.querySelector('[data-action="cancel"]').onclick = closeDialog;
   dialog.querySelector('[data-action="archive"]').onclick = async (event) => {
@@ -256,6 +259,7 @@ async function executeDelete(user, runtime, categoryId, categoryName, count, pen
   const button = document.querySelector('#delete-guard-dialog [data-action="confirm"], #delete-guard-dialog [data-action="delete"]');
   if (button) { button.disabled = true; button.textContent = '삭제 중…'; }
   try {
+    if (await hasSavedReferences(user, categoryId, await entryCount(user, categoryId), await runtime.store.countPendingByCategory(user.uid, categoryId))) throw new Error('사용 이력이 생긴 항목입니다. 삭제 대신 보관하세요.');
     await permanentlyDelete(user, categoryId);
     await cleanupOfflineCategory(runtime, user.uid, categoryId);
     document.dispatchEvent(new CustomEvent('weekly-time-budget:entries-changed', { detail: { userId: user.uid } }));
@@ -266,6 +270,17 @@ async function executeDelete(user, runtime, categoryId, categoryName, count, pen
     alert(`완전히 삭제하지 못했습니다: ${error.message}`);
     if (button) { button.disabled = false; button.textContent = count || pendingCount ? '그래도 완전 삭제' : '삭제'; }
   }
+}
+
+async function hasSavedReferences(user, categoryId, count, pendingCount) {
+  const root=['users',user.uid];
+  const [weeks,days,timer,life]=await Promise.all([
+    store.getDocs(store.collection(db,...root,'weeklyBudgets')),
+    store.getDocs(store.collection(db,...root,'dailyBudgets')),
+    store.getDoc(store.doc(db,...root,'activeTimer','current')),
+    store.getDoc(store.doc(db,...root,'lifeManager','state')),
+  ]);
+  return categoryHasReferences(categoryId,{entryCount:count,pendingCount,weeklyBudgets:weeks.docs.map(d=>d.data()),dailyBudgets:days.docs.map(d=>d.data()),timer:timer.exists()?timer.data():null,life:life.exists()?life.data().state:null});
 }
 
 ensureStyles();

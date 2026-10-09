@@ -6,7 +6,7 @@ test('PWA stalls fall back to this generation cache including versioned URLs', a
   assert.equal(typeof cacheModule.networkFirstWithDeadline, 'function');
   let aborted = false; let matched;
   const response = await cacheModule.networkFirstWithDeadline({
-    request: new Request('https://example.com/app/styles.css?v=27'), timeoutMs: 10,
+    request: new Request('https://example.com/app/styles.css?v=28'), timeoutMs: 10,
     fetchFn: (_req, { signal }) => { signal.addEventListener('abort', () => { aborted = true; }); return new Promise(() => {}); },
     cache: { match: async (key, options) => { matched = options; return new Response('cached'); } },
   });

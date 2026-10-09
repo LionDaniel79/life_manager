@@ -1,11 +1,11 @@
 const views = ['dashboard', 'record', 'budget', 'history', 'statistics', 'categories'];
 const titles = {
-  dashboard: '대시보드',
+  dashboard: '오늘',
   record: '시간 기록',
-  budget: '시간 예산',
+  budget: '목표 설정',
   history: '기록 내역',
   statistics: '통계',
-  categories: '대분류 관리',
+  categories: '앱 설정',
 };
 
 let activeView = 'dashboard';
@@ -24,7 +24,7 @@ function ensureViewFeedback(name) {
 }
 
 function switchView(name, { save = true, force = false, closeSidebar = true } = {}) {
-  const safe = views.includes(name) ? name : 'dashboard';
+  const safe = name === 'history' ? 'record' : views.includes(name) ? name : 'dashboard';
   const alreadyVisible = activeView === safe
     && !document.querySelector(`#${safe}-view`)?.classList.contains('hidden');
   if (alreadyVisible && !force) {
@@ -33,7 +33,8 @@ function switchView(name, { save = true, force = false, closeSidebar = true } = 
   }
 
   ensureViewFeedback(safe);
-  views.forEach((view) => document.querySelector(`#${view}-view`)?.classList.toggle('hidden', view !== safe));
+  views.forEach((view) => document.querySelector(`#${view}-view`)?.classList.toggle('hidden', (view === 'history' ? 'record' : view) !== safe));
+  document.querySelectorAll('[data-life-view]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.lifeView !== safe));
   document.querySelectorAll('.nav-button').forEach((button) => {
     const selected = button.dataset.view === safe;
     button.classList.toggle('active', selected);

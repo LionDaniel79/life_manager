@@ -12,14 +12,14 @@ test('구형 runtime과 셸 캐시는 최신 앱 파일보다 먼저 반환되�
     await runtime.put('/src/statistics-bootstrap.js', new Response('/* stale-statistics-v13 */', {
       headers: { 'Content-Type': 'text/javascript' },
     }));
-    const oldShell = await caches.open('weekly-time-budget-shell-v16');
+    const oldShell = await caches.open('life-manager-shell-v16');
     await oldShell.put('/index.html', new Response('<!doctype html><html><body><p id="cached-generation">v16</p></body></html>', {
       headers: { 'Content-Type': 'text/html' },
     }));
   });
 
   await page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.register('/service-worker.js?app-build=2026.10.06-loading-v27', {
+    const registration = await navigator.serviceWorker.register('/service-worker.js?app-build=2026.10.09-life-v28', {
       type: 'module',
       scope: '/',
       updateViaCache: 'none',
@@ -31,12 +31,12 @@ test('구형 runtime과 셸 캐시는 최신 앱 파일보다 먼저 반환되�
     await registration.update();
   });
 
-  const source = await page.evaluate(() => fetch('/src/statistics-bootstrap.js?v=27').then((response) => response.text()));
+  const source = await page.evaluate(() => fetch('/src/statistics-bootstrap.js?v=28').then((response) => response.text()));
   expect(source).not.toContain('stale-statistics-v13');
 
-  await page.goto('/index.html?app-build=2026.10.06-loading-v27');
+  await page.goto('/index.html?app-build=2026.10.09-life-v28');
   await expect(page.locator('#cached-generation')).toHaveCount(0);
-  await expect(page.locator('h1').first()).toHaveText('주간 시간 예산');
-  await expect(page.locator('html')).toHaveAttribute('data-app-build', '2026.10.06-loading-v27');
-  await expect(page.locator('[data-build-label]').first()).toContainText('v27');
+  await expect(page.locator('h1').first()).toHaveText('시간을 삶의 목표로');
+  await expect(page.locator('html')).toHaveAttribute('data-app-build', '2026.10.09-life-v28');
+  await expect(page.locator('[data-build-label]').first()).toContainText('v28');
 });

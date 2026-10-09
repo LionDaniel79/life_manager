@@ -1,0 +1,12 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { firebaseConfig } from '../firebase-config.js';
+import { preparePagesSite } from './prepare-pages-site.mjs';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const output=path.resolve(root,'_site');
+if(path.dirname(output)!==path.resolve(root))throw Error('Invalid Pages output');
+const map={apiKey:'FIREBASE_API_KEY',authDomain:'FIREBASE_AUTH_DOMAIN',projectId:'FIREBASE_PROJECT_ID',storageBucket:'FIREBASE_STORAGE_BUCKET',messagingSenderId:'FIREBASE_MESSAGING_SENDER_ID',appId:'FIREBASE_APP_ID',measurementId:'FIREBASE_MEASUREMENT_ID'};
+const defaults=Object.fromEntries(Object.entries(map).map(([key,name])=>[name,firebaseConfig[key]||'']));
+const provided=Object.fromEntries(Object.entries(process.env).filter(([,value])=>String(value).trim()));
+await preparePagesSite({rootDir:root,outputDir:output,env:{...defaults,...provided}});
+console.log('Prepared Pages application assets only.');

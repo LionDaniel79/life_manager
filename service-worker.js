@@ -1,13 +1,15 @@
 import { cacheModuleGraph, networkFirstWithDeadline } from './src/service-worker-cache.js';
 
-const APP_BUILD = '2026.10.06-loading-v27';
-const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
-// const SHELL_CACHE = 'weekly-time-budget-shell-v16';
-const RUNTIME_CACHE = 'weekly-time-budget-firebase-v2';
-const APP_CACHE_PREFIX = 'weekly-time-budget-';
+const APP_BUILD = '2026.10.09-life-v28';
+const SHELL_CACHE = `life-manager-shell-${APP_BUILD}`;
+// const SHELL_CACHE = 'life-manager-shell-v16';
+const RUNTIME_CACHE = 'life-manager-firebase-v1';
+const APP_CACHE_PREFIX = 'life-manager-';
 const FIREBASE_VERSION_ROOT = 'https://www.gstatic.com/firebasejs/11.10.0/';
 
 const SHELL_URLS = [
+  './src/life/domain.js', './src/life/model.js', './src/life/repository.js', './src/life/ui.js',
+  './src/life/forms.js', './src/life/views.js', './src/life/feature.js', './src/life/style.css', './src/life/category-guard.js',
   './', './index.html', './styles.css', './src/mobile-compact.css', './src/statistics-primary.css',
   './manifest.webmanifest', './firebase-config.js', './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png',
   './src/category-effective-date.js', './src/goal-domain.js', './src/domain.js', './src/manual-entry.js',

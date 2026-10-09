@@ -1,18 +1,18 @@
 {
-  "name": "weekly-time-budget",
-  "version": "0.1.0",
+  "name": "life-manager",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test tests/*.test.js tests/*.test.mjs",
     "test:browser": "playwright test",
     "test:all": "npm test && npm run test:browser",
     "prepare:icons": "node scripts/materialize-icons.mjs",
-    "start": "npm run prepare:icons && npx serve .",
-    "prepare:pages": "node scripts/prepare-pages-site.mjs"
+    "start": "node scripts/serve.mjs",
+    "prepare:pages": "node scripts/build.mjs",
+    "build": "node scripts/build.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.54.0",
-    "serve": "^14.2.4"
+    "@playwright/test": "^1.54.0"
   }
 }

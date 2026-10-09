@@ -1,2 +1,13 @@
 _site/
 icons/
+node_modules/
+dist/
+local-data/
+analysis/
+.superpowers/
+AGENTS.md
+.env
+.env.*
+test-results/
+playwright-report/
+*.log

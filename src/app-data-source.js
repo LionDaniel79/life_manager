@@ -1,5 +1,6 @@
 import { createReadCache } from './async-control.js';
 import { normalizeGoalType } from './goal-domain.js';
+import { createLifeRepository } from './life/repository.js';
 
 function plainEntry(doc) {
   const data = doc.data();
@@ -23,6 +24,7 @@ export function createAppDataSource({ firebase, db, readTimeoutMs = 8000 }) {
   const userDocument = (userId, collectionName, id) => firebase.doc(db, 'users', userId, collectionName, id);
 
   const source = {
+    ...createLifeRepository({ firebase, db }),
     invalidate(userId, scope = '') { reads.invalidate(`${userId}:${scope}`); },
     async loadUserData(userId) {
       return reads.read(`${userId}:user`, async () => {

@@ -35,5 +35,5 @@ test('새 통계 bootstrap과 상태·뷰·feature만 앱 셸에 포함된다', 
   for (const file of ['./src/statistics-state.js', './src/statistics-data-source.js', './src/statistics-view.js', './src/statistics-feature.js', './src/statistics-bootstrap.js']) {
     assert.ok(worker.includes(file), file);
   }
-  assert.ok(worker.includes('weekly-time-budget-shell-${APP_BUILD}'));
+  assert.ok(worker.includes('life-manager-shell-${APP_BUILD}'));
 });

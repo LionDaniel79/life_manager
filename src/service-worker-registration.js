@@ -1,6 +1,6 @@
-const APP_BUILD = '2026.10.06-loading-v27';
-const BUILD_KEY = 'weekly-time-budget:active-build';
-const RESET_KEY = `weekly-time-budget:reset:${APP_BUILD}`;
+const APP_BUILD = '2026.10.09-life-v28';
+const BUILD_KEY = 'life-manager:active-build';
+const RESET_KEY = `life-manager:reset:${APP_BUILD}`;
 
 async function clearLegacyRuntime() {
   if (sessionStorage.getItem(RESET_KEY) === 'done') return;
@@ -17,7 +17,7 @@ async function clearLegacyRuntime() {
   if ('caches' in globalThis) {
     const names = await caches.keys();
     await Promise.all(names
-      .filter((name) => name.startsWith('weekly-time-budget-'))
+      .filter((name) => name.startsWith('life-manager-'))
       .map((name) => caches.delete(name)));
   }
   localStorage.setItem(BUILD_KEY, APP_BUILD);

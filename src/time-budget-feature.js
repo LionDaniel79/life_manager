@@ -518,7 +518,7 @@ function updateHeader(view) {
       ? `${state.dashboard.selectedDate} · 일간 현황`
       : `${weekLabel(state.dashboard.selectedWeekStart)} · 주간 현황`;
   } else if (view === 'budget') {
-    document.querySelector('#page-title').textContent = '시간 예산';
+    document.querySelector('#page-title').textContent = '목표 설정';
     document.querySelector('#week-label').textContent = state.budget.mode === 'today'
       ? `${state.budget.today} · 오늘 시간 예산`
       : `${weekLabel(currentWeekStart())} · 이번 주 시간 예산`;

@@ -145,13 +145,13 @@ test('운영 HTML은 아이폰 아이콘과 웹앱 manifest를 상대 경로로 
   assert.match(html, /sizes="180x180"/);
   assert.match(html, /href="\.\/icons\/apple-touch-icon\.png(?:\?v=\d+)?"/);
   assert.match(html, /rel="manifest" href="\.\/manifest\.webmanifest(?:\?v=\d+)?"/);
-  assert.match(html, /name="apple-mobile-web-app-title" content="주간 시간 예산"/);
+  assert.match(html, /name="apple-mobile-web-app-title" content="Life Manager"/);
 });
 
 test('웹앱 manifest는 GitHub Pages 하위 경로에서 독립 실행되도록 설정한다', async () => {
   const manifest = JSON.parse(await readFile(new URL('../manifest.webmanifest', import.meta.url), 'utf8'));
-  assert.equal(manifest.name, '주간 시간 예산');
-  assert.equal(manifest.short_name, '시간 예산');
+  assert.equal(manifest.name, 'Life Manager');
+  assert.equal(manifest.short_name, 'Life Manager');
   assert.equal(manifest.start_url, './');
   assert.equal(manifest.scope, './');
   assert.equal(manifest.display, 'standalone');
