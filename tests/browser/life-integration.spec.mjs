@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+test.use({ timezoneId: 'Asia/Seoul' });
 const original=await readFile(new URL('../../index.html',import.meta.url),'utf8');
 const html=original.replace(/<script[^>]*>[\s\S]*?<\/script>/g,'').replace('</body>','<script type="module" src="/tests/browser/fixtures/life-harness.js"></script></body>');
 async function open(page,width=1200){await page.setViewportSize({width,height:900});await page.route('**/life-test',r=>r.fulfill({contentType:'text/html',body:html}));await page.goto('/life-test');await expect(page.locator('.life-sync')).toContainText('동기화 완료');}

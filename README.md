@@ -36,7 +36,7 @@ Firebase 설정은 기존 운영 웹앱의 공개 클라이언트 설정입니�
 
 ## 운영과 복구
 
-새 배포 주소: https://liondaniel79.github.io/life_manager/ (배포 성공 후 사용). 기존 운영 주소 https://liondaniel79.github.io/weekly-time-budget/ 는 유지합니다. main에 검증한 변경을 올리면 GitHub Pages에 자동 배포됩니다. 개발은 feature/upstream-goals 같은 별도 브랜치에서 진행합니다. 실패하면 GitHub Actions의 실패 단계와 로그를 확인하고, 문제 커밋을 git revert로 되돌려 다시 배포합니다.
+배포 주소: https://liondaniel79.github.io/life_manager/ . 기존 운영 주소 https://liondaniel79.github.io/weekly-time-budget/ 는 유지합니다. main에 검증한 변경을 올리면 GitHub Pages에 자동 배포됩니다. 개발은 feature/upstream-goals 같은 별도 브랜치에서 진행합니다. 실패하면 GitHub Actions의 실패 단계와 로그를 확인하고, 문제 커밋을 git revert로 되돌려 다시 배포합니다.
 
 Firebase 승인 도메인은 liondaniel79.github.io 입니다. 로컬 로그인에 필요한 경우 localhost와 127.0.0.1도 Firebase Authentication 설정에서 승인해야 합니다. 새 프로젝트를 만들 때 Google 공급자와 firestore.rules를 적용하세요. 현재 연결은 기존 프로젝트를 사용합니다.
 
