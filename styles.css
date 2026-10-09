@@ -41,15 +41,34 @@ h1,h2,h3,p { margin-top: 0; }
 .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .tab-button { min-height: 44px; border: 1px solid #ccd4cf; background: white; border-radius: 12px; padding: 10px 14px; cursor: pointer; }
 .tab-button.active { background: #173b33; color: #fff; }
-.manual-mode-switch { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
-.manual-mode-switch .tab-button { min-width: 0; width: 100%; white-space: normal; }
-.duration-input-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; }
 .hours-input { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; }
-.duration-input-row span { font-weight: 800; white-space: nowrap; }
 .hours-input span { font-weight: 800; white-space: nowrap; }
 .form-grid { display: grid; gap: 14px; }
 .form-grid label { display: grid; gap: 7px; font-weight: 700; }
 .form-grid input,.form-grid select,.form-grid textarea,.time-budget-form input { width: 100%; max-width: 100%; min-height: 44px; border: 1px solid #cdd5d0; border-radius: 12px; padding: 10px 12px; background: white; }
+#record-view .form-grid label { min-width: 0; }
+#record-view .form-grid input,
+#record-view .form-grid select,
+#record-view .form-grid textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid #cdd5d0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+#record-view .form-grid input,
+#record-view .form-grid select { height: 44px; min-height: 44px; }
+#record-view .form-grid textarea { min-height: 84px; resize: vertical; }
+#record-view input[type="date"] { appearance: none; -webkit-appearance: none; }
+#record-view input[type="date"]::-webkit-date-and-time-value { min-height: 20px; text-align: left; }
+#record-view input[type="date"]::-webkit-datetime-edit { padding: 0; }
 .timer { font-size: 3rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: 900; margin: 30px 0; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .entry { display: grid; grid-template-columns: 110px minmax(0,1fr) auto; gap: 14px; align-items: start; padding: 15px 0; border-bottom: 1px solid #e5e6df; }
@@ -143,9 +162,6 @@ h1,h2,h3,p { margin-top: 0; }
   .actions>* { flex: 1 1 100%; }
 }
 @media(max-width:360px) {
-  .manual-mode-switch { gap: 6px; }
-  .manual-mode-switch .tab-button { padding: 9px 8px; font-size: .9rem; }
-  .duration-input-row { gap: 8px; }
   .main-content { padding-inline: 12px; }
   .record-calendar-grid,.record-calendar-weekdays { gap: 3px; }
 }

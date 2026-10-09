@@ -13,6 +13,7 @@ import {
   buildStatisticsViewModel,
   renderStatisticsFailure,
   renderStatisticsHtml,
+  renderStatisticsLoading,
 } from './statistics-view.js';
 
 function localDateKey(date) {
@@ -26,6 +27,12 @@ function errorMessage(error) {
 
 export function createStatisticsFeature({
   root,
+  goalsRoot = root?.ownerDocument?.querySelector('#life-statistics') || globalThis.document?.querySelector('#life-statistics'),
+  onModeChange = (mode) => {
+    const owner = root?.ownerDocument || globalThis.document;
+    const EventClass = owner?.defaultView?.CustomEvent || globalThis.CustomEvent;
+    if (owner && EventClass) owner.dispatchEvent(new EventClass('weekly-time-budget:statistics-mode-changed', { detail: { mode } }));
+  },
   dataSource,
   getCurrentUser,
   saveUiState = async () => {},
@@ -52,6 +59,16 @@ export function createStatisticsFeature({
   let invalidated = false;
   let refreshRequested = false;
   let lastLoadedAt = 0;
+  let loadError = null;
+
+  function syncGoalsVisibility() {
+    const visible = active && !destroyed && state.mode === 'goals';
+    onModeChange(state.mode);
+    if (goalsRoot) {
+      goalsRoot.hidden = !visible;
+      goalsRoot.classList.toggle('hidden', !visible);
+    }
+  }
 
   function contextFor(currentState = state) {
     const current = now();
@@ -92,13 +109,21 @@ export function createStatisticsFeature({
   }
 
   function render({ force = false } = {}) {
-    if (!active || destroyed || !state.data) return false;
+    syncGoalsVisibility();
+    if (!active || destroyed) return false;
+    if (state.mode !== 'goals' && !state.data) {
+      const error = state.renderError || loadError;
+      root.innerHTML = error
+        ? renderStatisticsFailure({ mode: state.mode, stage: '통계 데이터 로드', message: errorMessage(error) })
+        : renderStatisticsLoading(state.mode);
+      return true;
+    }
     const signature = presentationSignature(state);
     if (!force && signature === lastRenderedSignature) return false;
 
     let context;
     try {
-      context = contextFor(state);
+      context = state.mode === 'goals' ? {} : contextFor(state);
     } catch (error) {
       showFailure(error.statisticsStage || '기록 기간 인덱스', error);
       return false;
@@ -146,6 +171,7 @@ export function createStatisticsFeature({
   }
 
   function normalizePeriod(nextState) {
+    if (nextState.mode === 'goals') return nextState;
     const context = contextFor(nextState);
     let normalized = nextState;
     if (normalized.mode === 'weekly') {
@@ -197,7 +223,7 @@ export function createStatisticsFeature({
       dataVersion: snapshot.dataVersion,
       source: snapshot.source,
       warning: snapshot.warning || '',
-    }, contextFor(state));
+    }, state.mode === 'goals' ? {} : contextFor(state));
     state = normalizePeriod(result.state);
     render();
   }
@@ -221,15 +247,14 @@ export function createStatisticsFeature({
       state = createStatisticsState({ now: now(), restored });
       lastRenderedSignature = '';
       lastModel = null;
-      root.innerHTML = '<div class="card"><h2>통계를 불러오는 중…</h2><p class="muted">새 사용자의 자료를 확인하고 있습니다.</p></div>';
+      render({ force: true });
     }
     loadedUserId = user.uid;
     invalidated = false;
+    loadError = null;
     const sequence = ++requestSequence;
-    if (!state.data) {
-      root.innerHTML = '<div class="card"><h2>통계를 불러오는 중…</h2><p class="muted">기기에 저장된 자료를 확인하고 있습니다.</p></div>';
-    }
-    state = applyStatisticsAction(state, { type: 'load-status', status: 'loading' }, contextFor(state)).state;
+    state = applyStatisticsAction(state, { type: 'load-status', status: 'loading' }, {}).state;
+    render();
 
     const promise = dataSource.load(user.uid, {
       onCache: async (snapshot) => {
@@ -251,7 +276,9 @@ export function createStatisticsFeature({
       return finalSnapshot;
     }).catch((error) => {
       if (sequence !== requestSequence || getCurrentUser()?.uid !== user.uid) return null;
-      showFailure('통계 데이터 로드', error);
+      loadError = error;
+      if (state.mode === 'goals') render({ force: true });
+      else showFailure('통계 데이터 로드', error);
       return null;
     }).finally(() => {
       if (loadingPromise === promise) {
@@ -267,7 +294,7 @@ export function createStatisticsFeature({
   }
 
   async function selectMode(mode) {
-    const context = contextFor(state);
+    const context = mode === 'goals' ? {} : contextFor(state);
     let next = applyStatisticsAction(state, { type: 'select-mode', mode }, context).state;
     if (next === state) return false;
     if (mode === 'monthly') {
@@ -350,11 +377,13 @@ export function createStatisticsFeature({
   async function enter() {
     if (destroyed) return null;
     active = true;
+    render();
     return load();
   }
 
   function leave() {
     active = false;
+    syncGoalsVisibility();
   }
 
   function restore(saved = {}) {
@@ -381,6 +410,7 @@ export function createStatisticsFeature({
   function destroy() {
     destroyed = true;
     active = false;
+    syncGoalsVisibility();
     requestSequence += 1;
     root.removeEventListener('click', onClick);
     root.removeEventListener('change', onChange);

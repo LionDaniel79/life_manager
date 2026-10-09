@@ -22,6 +22,7 @@ const MODE_LABELS = Object.freeze({
   yearly: '연간 통계',
   'monthly-comparison': '월간 비교',
   'yearly-comparison': '연도별 비교',
+  goals: '목표통계',
 });
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (character) => ({
@@ -83,6 +84,9 @@ function headerText(state) {
 }
 
 export function buildStatisticsViewModel(state, { now = new Date() } = {}) {
+  if (state?.mode === 'goals') {
+    return { mode: 'goals', modeLabel: MODE_LABELS.goals, tabs: modeTabs('goals'), headerText: '목표별 시간·숫자 진행' };
+  }
   if (!state?.data) throw new Error('통계 데이터가 준비되지 않았습니다.');
   const data = state.data;
   const entries = data.entries || [];
@@ -153,7 +157,7 @@ export function buildStatisticsViewModel(state, { now = new Date() } = {}) {
   return {
     mode: state.mode,
     modeLabel: MODE_LABELS[state.mode] || '통계',
-    tabs: Object.entries(MODE_LABELS).map(([mode, label]) => ({ mode, label, active: mode === state.mode })),
+    tabs: modeTabs(state.mode),
     source: state.source,
     warning: state.warning || '',
     headerText: headerText(state),
@@ -176,6 +180,10 @@ export function buildStatisticsViewModel(state, { now = new Date() } = {}) {
     comparison,
     comparisonKind,
   };
+}
+
+function modeTabs(selected) {
+  return Object.entries(MODE_LABELS).map(([mode, label]) => ({ mode, label, active: mode === selected }));
 }
 
 function tabsHtml(model) {
@@ -275,10 +283,15 @@ function comparisonHtml(model) {
 }
 
 export function renderStatisticsHtml(model) {
+  if (model.mode === 'goals') return `<div data-statistics-feature data-statistics-mode="goals">${tabsHtml(model)}</div>`;
   return `<div data-statistics-feature data-statistics-mode="${model.mode}">${tabsHtml(model)}${controlsHtml(model)}${noticeHtml(model)}${timeTotalsNoteHtml()}${summaryCardsHtml(model)}${categoryTableHtml(model)}${comparisonHtml(model)}</div>`;
 }
 
 export function renderStatisticsFailure({ mode, stage, message }) {
   const label = MODE_LABELS[mode] || '통계';
-  return `<div class="card statistics-error" data-statistics-error><h2>${label}를 표시하지 못했습니다.</h2><p class="warning">문제가 발생한 단계: ${escapeHtml(stage || '알 수 없음')}</p><p class="muted">${escapeHtml(message || '통계 자료를 처리하지 못했습니다.')}</p><button data-statistics-retry class="primary-button" type="button">다시 시도</button></div>`;
+  return `${tabsHtml({ tabs: modeTabs(mode) })}<div class="card statistics-error" data-statistics-error><h2>${label}를 표시하지 못했습니다.</h2><p class="warning">문제가 발생한 단계: ${escapeHtml(stage || '알 수 없음')}</p><p class="muted">${escapeHtml(message || '통계 자료를 처리하지 못했습니다.')}</p><button data-statistics-retry class="primary-button" type="button">다시 시도</button></div>`;
+}
+
+export function renderStatisticsLoading(mode) {
+  return `${tabsHtml({ tabs: modeTabs(mode) })}<div class="card" role="status"><h2>통계를 불러오는 중…</h2><p class="muted">기기에 저장된 자료와 서버의 최신 자료를 확인하고 있습니다.</p></div>`;
 }

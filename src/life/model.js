@@ -1,8 +1,10 @@
-import { createState, apply, linkedActivityGoals, canLinkActivity, localDate, validateState } from './domain.js';
+import { createState, apply, linkedActivityGoals, canLinkActivity, localDate, validateState, retainedPathForEntry } from './domain.js';
 
 export function resolveEntryGoal(s, entry) {
   const assigned = s.assignments?.find(a => a.entryId === entry.id);
   if (assigned) return assigned.goalId;
+  const retained=retainedPathForEntry(s,entry);
+  if(retained)return retained.goalIds[0];
   const choices = linkedActivityGoals(s, entry.categoryId, entry.date);
   return choices.length === 1 ? choices[0].id : null;
 }
@@ -42,9 +44,10 @@ export function applyLife(state, action, today=localDate()) {
     const entry=s.entries.find(e=>e.id===action.entryId);
     if (!entry || action.goalId && !linkedActivityGoals(s,entry.categoryId,entry.date).some(g=>g.id===action.goalId)) throw Error('기록일에 연결된 중기·단기 목표를 선택하세요.');
     s.assignments=s.assignments.filter(a=>a.entryId!==action.entryId);
+    s.retainedEntryPaths=(s.retainedEntryPaths||[]).filter(p=>p.entryId!==action.entryId);
     s.assignments.push({entryId:action.entryId,goalId:action.goalId || null});
   } else {
-    if (!/^(goal\.save|home\.(toggle|move)|result\.save|weight\.(save|delete)|review\.save)$/.test(action.type)) throw Error('지원하지 않는 목표 작업입니다.');
+    if (!/^(goal\.(save|archive|delete)|home\.(toggle|move)|result\.save)$/.test(action.type)) throw Error('지원하지 않는 목표 작업입니다.');
     s=apply(state,action,today);
   }
   s.entries=s.entries.map(e=>({...e,goalId:resolveEntryGoal(s,e)}));

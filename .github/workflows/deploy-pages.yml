@@ -48,9 +48,9 @@ jobs:
 
       - name: Verify release source contracts
         run: |
-          grep -q '2026.10.09-life-v29' index.html
-          grep -q '2026.10.09-life-v29' service-worker.js
-          grep -q '앱 버전 v29' index.html
+          grep -q '2026.10.09-life-v30' index.html
+          grep -q '2026.10.09-life-v30' service-worker.js
+          grep -q '앱 버전 v30' index.html
           grep -q 'validWeekStart' src/statistics-state.js
           ! grep -q 'coerceRecordedPeriodSelection' src/statistics-state.js
           grep -q 'refreshQueued' src/statistics-bootstrap.js
@@ -70,16 +70,16 @@ jobs:
 
       - name: Verify deployed build contents
         run: |
-          grep -q '2026.10.09-life-v29' _site/index.html
-          grep -q '2026.10.09-life-v29' _site/service-worker.js
-          grep -q '앱 버전 v29' _site/index.html
+          grep -q '2026.10.09-life-v30' _site/index.html
+          grep -q '2026.10.09-life-v30' _site/service-worker.js
+          grep -q '앱 버전 v30' _site/index.html
           grep -q 'validWeekStart' _site/src/statistics-state.js
           grep -q 'refreshQueued' _site/src/statistics-bootstrap.js
           grep -q "closest?.('#mobile-menu')" _site/src/app-shell.js
           ! grep -q 'view-change-events.js' _site/index.html
 
       - name: Record release identity
-        run: printf '{"commit":"%s","build":"2026.10.09-life-v29"}\n' "$GITHUB_SHA" > _site/release.json
+        run: printf '{"commit":"%s","build":"2026.10.09-life-v30"}\n' "$GITHUB_SHA" > _site/release.json
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -106,7 +106,7 @@ jobs:
         run: |
           for attempt in $(seq 1 12); do
             if curl -fsS --max-time 15 "${PAGE_URL}?verify=${GITHUB_SHA}" -o /tmp/live-index.html &&
-               grep -q '2026.10.09-life-v29' /tmp/live-index.html &&
+               grep -q '2026.10.09-life-v30' /tmp/live-index.html &&
                curl -fsS --max-time 15 "${PAGE_URL}src/time-budget-feature.js?verify=${GITHUB_SHA}" -o /tmp/live-budget.js &&
                grep -q 'writeVersion' /tmp/live-budget.js &&
                curl -fsS --max-time 15 "${PAGE_URL}release.json?verify=${GITHUB_SHA}" -o /tmp/live-release.json &&

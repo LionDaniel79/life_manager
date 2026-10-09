@@ -15,7 +15,7 @@ import {
 import { createDefaultUiState } from './ui-session-state.js';
 import { normalizeGoalType } from './goal-domain.js';
 
-const views = ['dashboard', 'record', 'budget', 'history', 'statistics', 'categories'];
+const views = ['dashboard', 'record', 'budget', 'goals', 'history', 'statistics', 'categories'];
 const state = {
   user: null,
   userDataReady: false,
@@ -25,7 +25,7 @@ const state = {
   remoteEntries: [],
   timer: null,
   activeRecordTab: 'timer',
-  manualInputMode: MANUAL_INPUT_MODES.TIME_RANGE,
+  manualInputMode: MANUAL_INPUT_MODES.DURATION,
   manualCategoryId: '',
   activeView: 'dashboard',
   uiState: null,

@@ -68,15 +68,6 @@ test('history label covers direct, timed, and legacy records', () => {
   assert.equal(manualEntryTimeLabel({ durationMinutes: 15 }, formatMinutes), '15분');
 });
 
-test('manual duration controls stay within the mobile viewport', async () => {
-  const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
-  assert.match(css, /\.manual-mode-switch\s*\{[^}]*display\s*:\s*grid/s);
-  assert.match(css, /\.manual-mode-switch\s*\{[^}]*grid-template-columns\s*:\s*repeat\(2,minmax\(0,1fr\)\)/s);
-  assert.match(css, /\.manual-mode-switch \.tab-button\s*\{[^}]*min-width\s*:\s*0/s);
-  assert.match(css, /\.duration-input-row\s*\{[^}]*display\s*:\s*grid/s);
-  assert.match(css, /\.duration-input-row\s*\{[^}]*grid-template-columns\s*:\s*minmax\(0,1fr\) auto/s);
-  assert.match(css, /@media\(max-width:360px\)/);
-});
 
 test('manual entry JavaScript files have valid syntax', () => {
   for (const relativePath of ['../src/manual-entry.js', '../src/app.js']) {

@@ -1,6 +1,6 @@
 import { localDate, goalVersion } from './domain.js';
 import { hydrateLife, persistLife, applyLife, validateLife } from './model.js';
-import { goalForm, linkFields, weightForm, resultForm, reviewForm } from './forms.js';
+import { goalForm, linkFields, resultForm } from './forms.js';
 import { home, goals, detail, attribution, statistics, settings, action } from './views.js';
 import { esc } from './ui.js';
 import { showToast } from '../app-toast.js';
@@ -48,7 +48,7 @@ async function commit(change, replacement=null) {
   }
 }
 function open(html){dialog.innerHTML=html;if(!dialog.open)dialog.showModal();impact();}
-function impact(){const f=dialog.querySelector('[data-life-form="goal"]');if(!f)return;const date=f.elements.effectiveDate.value;const count=state.entries.filter(e=>e.date>=date).length;f.querySelector('#life-impact').textContent=`${date} 이후 기록 ${count}건이 있습니다. 연결된 활동·목표 기간에 맞는 기록만 반영됩니다. 여러 중기·단기 목표가 겹치면 시간 메뉴에서 직접 배정합니다.`;}
+function impact(){const f=dialog.querySelector('[data-life-form="goal"]');if(!f)return;const date=f.elements.effectiveDate.value;const count=state.entries.filter(e=>e.date>=date).length;f.querySelector('#life-impact').textContent=`${date} 이후 기록 ${count}건이 있습니다. 연결된 활동·목표 기간에 맞는 기록만 반영됩니다. 여러 중기·단기 목표가 겹치면 시간기록 메뉴에서 직접 배정합니다.`;}
 function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 document.addEventListener('weekly-time-budget:infrastructure-state',event=>{
@@ -63,17 +63,19 @@ document.addEventListener('click',async event=>{
   const type=b.dataset.life,id=b.dataset.id,date=localDate();
   try{
     if(type==='close'){dialog.close();return;}
-    if(type==='goals'){document.querySelector('nav [data-view="budget"]')?.click();return;}
+    if(type==='goals'){document.querySelector('nav [data-view="goals"]')?.click();return;}
     if(type==='refresh'){await refresh();return;}
     if(type==='new'){open(goalForm(state,'',date));return;}
     if(type==='edit'){open(goalForm(state,id,date));return;}
     if(type==='detail'){open(detail(state,id,date));return;}
-    if(type==='weight'){open(weightForm(date));return;}
     if(type==='result'){open(resultForm(state,id,date));return;}
-    if(type==='review'){open(reviewForm(date));return;}
+    if(type==='goal.archive'){await commit({type,id});dialog.close();toast('보관 영역으로 옮겼습니다.');return;}
+    if(type==='goal.delete'){
+      if(confirm('이 목표를 삭제할까요? 시간 기록과 하위 목표는 유지됩니다.')){await commit({type,id});dialog.close();toast('목표를 삭제했습니다.');}
+      return;
+    }
     if(type==='home.toggle'){await commit({type,id});return;}
     if(type==='home.up'||type==='home.down'){await commit({type:'home.move',id,direction:type==='home.up'?-1:1});return;}
-    if(type==='weight.delete'){if(confirm('이 체중 기록을 삭제할까요?'))await commit({type,id});return;}
     if(type==='backup'){download({format:'life-manager-goals-v1',exportedAt:new Date().toISOString(),state:persistLife(state)},`life-goals-${date}.json`);return;}
     if(type==='export-all'){
       const current=userId,source=infra.dataSource,snapshot=structuredClone({categories:infra.categories,archivedCategories:infra.archivedCategories,entries:infra.entries,life:persistLife(state)});
@@ -95,7 +97,7 @@ document.addEventListener('change',async event=>{
       const backup=JSON.parse(await el.files[0].text());
       if(backup.format!=='life-manager-goals-v1')throw Error('목표 백업 파일을 선택하세요.');
       validateLife(backup.state);
-      if(confirm(`현재 목표·체중·점검을 백업(목표 ${backup.state.goals.length}개)으로 교체할까요? 시간 기록과 시간 예산은 유지됩니다.`)){await commit(null,persistLife(backup.state));toast('목표 백업을 복원했습니다.');}
+      if(confirm(`현재 목표 데이터를 백업으로 교체할까요? 시간 기록과 시간 예산은 유지됩니다.`)){await commit(null,persistLife(backup.state));toast('목표 백업을 복원했습니다.');}
     }catch(error){toast(error.message,true);}finally{el.value='';}
   }
 });

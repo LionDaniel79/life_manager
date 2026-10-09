@@ -35,7 +35,7 @@ export function createState(date = localDate()) {
   return {
     schemaVersion: 1, revision: 0, createdDate: date,
     categories: defaults.map(([id, name], order) => ({ id, name, type: id === 'video' ? 'restraint' : 'growth', archived: false, order, budgetMinutes: null, budgetPeriod: 'week' })),
-    goals: [], links: [], entries: [], budgets: [], results: [], weights: [], reviews: [], audit: [], homeGoalIds: [], timer: null,
+    goals: [], links: [], entries: [], retainedEntryPaths: [], budgets: [], results: [], weights: [], reviews: [], audit: [], homeGoalIds: [], timer: null,
     settings: { weekStartsOn: 1, defaultMinutes: 30 },
   };
 }
@@ -43,35 +43,56 @@ export function createState(date = localDate()) {
 export function goalVersion(goal, date = localDate()) {
   return goal?.versions.filter(v => v.effectiveDate <= date).at(-1) ?? null;
 }
+export const goalIsDeleted = (goal, date = localDate()) => Boolean(goal?.deletedDate && goal.deletedDate <= date);
+export function listedGoals(s, date = localDate(), archived = false) {
+  return s.goals.filter(g => !goalIsDeleted(g,date) && goalVersion(g,date)
+    && (goalVersion(g,date).status === 'archived') === archived);
+}
 export function linkedActivityGoals(s, categoryId, date) {
   return s.links.filter(l => l.kind === 'activity' && l.fromId === categoryId && activeLink(l, date))
     .map(l => s.goals.find(g => g.id === l.toId)).filter(g => {
       const v = goalVersion(g, date);
-      return canLinkActivity(g?.level) && v && v.status === 'active' && inRange(date, v.startDate, v.endDate);
+      return !goalIsDeleted(g,date) && canLinkActivity(g?.level) && v && v.status === 'active' && inRange(date, v.startDate, v.endDate);
     });
 }
+export const retainedPathForEntry = (s, entry) => s.retainedEntryPaths?.find(p => p.entryId === entry.id && p.categoryId === entry.categoryId && p.date === entry.date);
 export function pathForEntry(s, entry) {
+  const retained = retainedPathForEntry(s,entry);
+  if (retained && retained.goalIds[0] === entry.goalId) return [...retained.goalIds];
   const path = [];
   let id = entry.goalId;
   if (!id || !s.links.some(l => l.kind === 'activity' && l.fromId === entry.categoryId && l.toId === id && activeLink(l, entry.date))) return path;
   while (id && !path.includes(id)) {
     const goal = s.goals.find(g => g.id === id);
     const v = goalVersion(goal, entry.date);
-    if (!v || goal.level === 'life' || v.status !== 'active' || !inRange(entry.date, v.startDate, v.endDate)) break;
+    if (!v || goalIsDeleted(goal,entry.date) || goal.level === 'life' || v.status !== 'active' || !inRange(entry.date, v.startDate, v.endDate)) break;
     path.push(id);
     id = s.links.find(l => l.kind === 'hierarchy' && l.fromId === id && activeLink(l, entry.date))?.toId;
   }
   return path;
 }
+function retainExistingPaths(s, goalId, fromDate) {
+  s.retainedEntryPaths ||= [];
+  for (const entry of s.entries.filter(e => e.date >= fromDate)) {
+    const goalIds = pathForEntry(s,entry);
+    if (!goalIds.includes(goalId)) continue;
+    // Only attribution is retained: corrected durations still come from the original time record.
+    s.retainedEntryPaths = s.retainedEntryPaths.filter(p => p.entryId !== entry.id);
+    s.retainedEntryPaths.push({entryId:entry.id,categoryId:entry.categoryId,date:entry.date,goalIds});
+  }
+}
 export function goalSummary(s, id, asOf = localDate()) {
   const goal = s.goals.find(g => g.id === id);
   const version = goalVersion(goal, asOf);
-  if (!version) return { goal, version: null, entries: [], minutes: 0, percent: null, result: null, children: [] };
+  if (!version) return { goal, version: null, entries: [], minutes: 0, percent: null, result: null, resultPercent: null, children: [] };
   const entries = s.entries.filter(e => e.date <= asOf && inRange(e.date, version.startDate, version.endDate) && pathForEntry(s, e).includes(id));
   const minutes = entries.reduce((sum, e) => sum + e.durationMinutes, 0);
   const result = s.results.filter(r => r.goalId === id && r.date <= asOf && r.metricKey === version.metricKey).sort((a,b) => a.date.localeCompare(b.date) || a.updatedAt.localeCompare(b.updatedAt)).at(-1) ?? null;
   const children = s.links.filter(l => l.kind === 'hierarchy' && l.toId === id && activeLink(l, asOf)).map(l => s.goals.find(g => g.id === l.fromId));
-  return { goal, version, entries, minutes, percent: version.targetMinutes == null || goal.level === 'life' ? null : minutes / version.targetMinutes * 100, result, children };
+  const start = version.resultStart ?? 0;
+  const resultPercent = result && version.resultTarget != null && version.resultTarget !== start
+    ? (result.value - start) / (version.resultTarget - start) * 100 : null;
+  return { goal, version, entries, minutes, percent: version.targetMinutes == null || goal.level === 'life' ? null : minutes / version.targetMinutes * 100, result, resultPercent, children };
 }
 export function dailyGoalStatus(s, id, asOf = localDate()) {
   const goal = s.goals.find(g => g.id === id);
@@ -115,11 +136,13 @@ function saveEntry(s, a, allowArchived = false) {
     goalId = choices[0]?.id ?? null;
   }
   if (goalId) check(linkedActivityGoals(s, category.id, a.date).some(g => g.id === goalId) || (existing?.goalId === goalId && existing.date === a.date && existing.categoryId === a.categoryId), '해당 날짜에 항목과 연결된 중기·단기 목표를 선택하세요.');
+  if (existing && (existing.goalId !== (goalId || null) || existing.date !== a.date || existing.categoryId !== a.categoryId)) s.retainedEntryPaths = (s.retainedEntryPaths || []).filter(p => p.entryId !== existing.id);
   upsert(s.entries, { id: a.id || uid(), categoryId: category.id, categoryName: existing?.categoryId === category.id ? existing.categoryName : category.name, date: a.date, durationMinutes, goalId: goalId || null, note: clean(a.note), source: a.source || existing?.source || 'manual', startTime: a.startTime || '', endTime: a.endTime || '', updatedAt: new Date().toISOString() });
 }
 
 function saveGoal(s, a, today) {
   const existing = s.goals.find(g => g.id === a.id);
+  check(!existing?.deletedDate, '삭제한 목표는 수정할 수 없습니다.');
   check(!existing || existing.level === a.level, '목표의 단계 변경은 새 목표로 만들어 주세요.');
   check(validDate(a.effectiveDate), '연결 적용일을 선택하세요.');
   check(!existing || a.effectiveDate >= existing.versions.at(-1).effectiveDate, '이전 버전보다 앞선 적용일로 바꿀 수 없습니다.');
@@ -134,9 +157,11 @@ function saveGoal(s, a, today) {
     startDate: a.startDate || a.effectiveDate, endDate: a.endDate || null,
     targetMinutes: a.level === 'life' ? null : nullableNumber(a.targetMinutes), dailyMinutes: a.level === 'life' ? null : nullableNumber(a.dailyMinutes),
     resultTarget: a.level === 'life' ? null : nullableNumber(a.resultTarget), resultUnit, metricKey,
+    resultStart: a.level === 'life' || a.resultTarget === '' || a.resultTarget == null ? null : nullableNumber(a.resultStart) ?? 0,
     status: a.status || 'active', nextAction: clean(a.nextAction, 500), changeNote: clean(a.changeNote, 500),
   };
   const goal = existing || { id, level: a.level, versions: [] };
+  if (existing && version.status === 'archived') retainExistingPaths(s,id,a.effectiveDate);
   // Same-day amendments retain the prior version in audit. No invented intra-day split.
   goal.versions = [...goal.versions.filter(v => v.effectiveDate !== a.effectiveDate), version];
   if (!existing) s.goals.push(goal);
@@ -144,20 +169,26 @@ function saveGoal(s, a, today) {
     if ((link.toId === id || (link.kind === 'hierarchy' && link.fromId === id)) && (!link.validTo || link.validTo > a.effectiveDate)) link.validTo = a.effectiveDate;
   }
   const open = (kind, fromId, toId) => {
+    for (const goalId of kind === 'hierarchy' ? [fromId,toId] : [toId]) {
+      const linked = s.goals.find(g => g.id === goalId);
+      check(linked && !linked.deletedDate && goalVersion(linked,a.effectiveDate)?.status !== 'archived', '삭제·보관한 목표에는 새로 연결할 수 없습니다.');
+    }
     if (kind === 'hierarchy') {
       for (const l of s.links.filter(l => l.kind === kind && l.fromId === fromId && (!l.validTo || l.validTo > a.effectiveDate))) l.validTo = a.effectiveDate;
     }
     s.links.push({ id: uid(), kind, fromId, toId, validFrom: a.effectiveDate, validTo: null });
   };
-  if (a.parentId) open('hierarchy', id, a.parentId);
-  for (const childId of new Set(a.childIds || [])) open('hierarchy', childId, id);
-  for (const categoryId of new Set(a.categoryIds || [])) open('activity', categoryId, id);
+  if (version.status !== 'archived') {
+    if (a.parentId) open('hierarchy', id, a.parentId);
+    for (const childId of new Set(a.childIds || [])) open('hierarchy', childId, id);
+    for (const categoryId of new Set(a.categoryIds || [])) open('activity', categoryId, id);
+  }
   if (a.includeUnassigned) {
     check(a.confirmRetroactive, '기존 미연결 기록을 포함할지 확인하세요.');
     for (const e of s.entries) if (!e.goalId && e.date >= a.effectiveDate && linkedActivityGoals(s, e.categoryId, e.date).some(g => g.id === id)) e.goalId = id;
   }
-  if (a.showHome === true && !s.homeGoalIds.includes(id)) s.homeGoalIds.push(id);
-  if (a.showHome === false) s.homeGoalIds = s.homeGoalIds.filter(x => x !== id);
+  if (a.showHome === true && version.status !== 'archived' && !s.homeGoalIds.includes(id)) s.homeGoalIds.push(id);
+  if (a.showHome === false || version.status === 'archived') s.homeGoalIds = s.homeGoalIds.filter(x => x !== id);
 }
 
 export function apply(state, action, today = localDate()) {
@@ -168,9 +199,29 @@ export function apply(state, action, today = localDate()) {
   if (lists[entity]) previous = structuredClone(s[lists[entity]].find(x => x.id === a.id) || null);
   switch (a.type) {
     case 'entry.save': saveEntry(s, a); break;
-    case 'entry.delete': s.entries = s.entries.filter(e => e.id !== a.id); break;
+    case 'entry.delete': s.entries = s.entries.filter(e => e.id !== a.id); s.retainedEntryPaths = (s.retainedEntryPaths || []).filter(p => p.entryId !== a.id); break;
     case 'goal.save': saveGoal(s, a, today); break;
-    case 'home.toggle': s.homeGoalIds = s.homeGoalIds.includes(a.id) ? s.homeGoalIds.filter(id => id !== a.id) : [...s.homeGoalIds, a.id]; break;
+    case 'goal.archive': {
+      const goal=s.goals.find(g=>g.id===a.id),v=goalVersion(goal,today);
+      check(v&&!goal.deletedDate, '삭제했거나 찾을 수 없는 목표입니다.');
+      saveGoal(s,{...v,id:a.id,level:goal.level,effectiveDate:today,status:'archived',showHome:false},today);
+      break;
+    }
+    case 'goal.delete': {
+      const goal=s.goals.find(g=>g.id===a.id);
+      check(goal&&!goal.deletedDate, '이미 삭제했거나 찾을 수 없는 목표입니다.');
+      retainExistingPaths(s,a.id,today);
+      // Keep a tombstone and dated links so old source records retain their historical totals.
+      goal.deletedDate=today;
+      for(const link of s.links)if((link.toId===a.id||(link.kind==='hierarchy'&&link.fromId===a.id))&&(!link.validTo||link.validTo>today))link.validTo=today;
+      s.homeGoalIds=s.homeGoalIds.filter(id=>id!==a.id);
+      break;
+    }
+    case 'home.toggle': {
+      const goal=s.goals.find(g=>g.id===a.id);
+      check(goal&&!goal.deletedDate&&goalVersion(goal,today)?.status!=='archived', '삭제·보관한 목표는 대시보드에 표시할 수 없습니다.');
+      s.homeGoalIds = s.homeGoalIds.includes(a.id) ? s.homeGoalIds.filter(id => id !== a.id) : [...s.homeGoalIds, a.id]; break;
+    }
     case 'home.move': {
       const i = s.homeGoalIds.indexOf(a.id), j = i + a.direction;
       if (i >= 0 && j >= 0 && j < s.homeGoalIds.length) [s.homeGoalIds[i], s.homeGoalIds[j]] = [s.homeGoalIds[j], s.homeGoalIds[i]];
@@ -201,7 +252,10 @@ export function apply(state, action, today = localDate()) {
       upsert(s.budgets, { id, week: a.week, categoryId: a.categoryId, minutes: Number(a.minutes) }); break;
     }
     case 'result.save': {
-      const v = goalVersion(s.goals.find(g => g.id === a.goalId), a.date);
+      const goal=s.goals.find(g=>g.id===a.goalId);
+      check(goal&&!goal.deletedDate&&goalVersion(goal,today)?.status!=='archived','삭제·보관한 목표에는 현재값을 기록할 수 없습니다.');
+      check(validDate(a.date)&&a.date<=today&&a.value!==''&&a.value!=null,'측정 날짜와 현재값을 확인하세요.');
+      const v = goalVersion(goal, a.date);
       check(v?.resultTarget != null, '해당 날짜의 결과 기준을 먼저 설정하세요.');
       upsert(s.results, { id: a.id || uid(), goalId: a.goalId, date: a.date, value: Number(a.value), metricKey: v.metricKey, note: clean(a.note), updatedAt: new Date().toISOString() }); break;
     }
@@ -260,17 +314,23 @@ export function validateState(s) {
     check(s[name].every(x => x && text(x.id, 160) && x.id.length > 0) && new Set(s[name].map(x => x.id)).size === s[name].length, `${name}에 중복/빈 ID가 있습니다.`);
   }
   const cat = id => s.categories.find(c => c.id === id), goal = id => s.goals.find(g => g.id === id);
+  const retained = s.retainedEntryPaths ?? [];
+  check(Array.isArray(retained) && retained.length <= 200000 && new Set(retained.map(p => p?.entryId)).size === retained.length,'보존된 시간 연결 목록이 올바르지 않습니다.');
+  for (const p of retained) check(p && text(p.entryId,200) && p.entryId.length > 0 && cat(p.categoryId) && validDate(p.date) && Array.isArray(p.goalIds) && p.goalIds.length > 0 && p.goalIds.length <= 3 && canLinkActivity(goal(p.goalIds[0])?.level) && p.goalIds.every((id,i) => goal(id) && goal(id).level !== 'life' && (!i || PARENT[goal(p.goalIds[i-1]).level] === goal(id).level)),'보존된 시간 연결 경로가 올바르지 않습니다.');
   for (const c of s.categories) check(text(c.name,80) && c.name.trim() && ['growth','restraint'].includes(c.type) && typeof c.archived === 'boolean' && num(c.order) && (c.budgetMinutes === null || num(c.budgetMinutes,0,10080)) && ['day','week'].includes(c.budgetPeriod), '활동 항목 형식이 올바르지 않습니다.');
   for (const g of s.goals) {
     check(Object.hasOwn(LEVELS,g.level) && Array.isArray(g.versions) && g.versions.length > 0, '목표 단계/기준이 잘못되었습니다.');
+    check(g.deletedDate==null||validDate(g.deletedDate)&&g.deletedDate>=g.versions.at(-1).effectiveDate,'목표 삭제 날짜가 잘못되었습니다.');
     let last = '';
     for (const v of g.versions) {
       check(validDate(v.effectiveDate) && v.effectiveDate > last && validDate(v.startDate) && (!v.endDate || validDate(v.endDate) && v.endDate >= v.startDate), '목표 날짜/기준 순서가 잘못되었습니다.'); last = v.effectiveDate;
       check(text(v.title,120) && v.title.trim() && text(v.reason) && text(v.nextAction,500) && text(v.changeNote,500), '목표 이름과 내용을 확인하세요.');
       check(['active','paused','completed','archived'].includes(v.status) && ['achievement','maintenance','exploration'].includes(v.kind), '목표 상태가 잘못되었습니다.');
-      check([v.targetMinutes,v.dailyMinutes,v.resultTarget].every(n => n === null || num(n,0.01)) && (v.dailyMinutes === null || v.dailyMinutes <= 1440), '목표 기준은 양수여야 합니다.');
+      check([v.targetMinutes,v.dailyMinutes].every(n => n === null || num(n,0.01)) && (v.dailyMinutes === null || v.dailyMinutes <= 1440), '시간 목표 기준은 양수여야 합니다.');
+      check((v.resultTarget===null||num(v.resultTarget))&&(v.resultStart==null||num(v.resultStart)),'숫자 목표의 시작값과 목표값은 0 이상의 수여야 합니다.');
+      check(!Object.hasOwn(v,'resultStart')||v.resultTarget===null||v.resultTarget!==(v.resultStart??0),'숫자 목표의 시작값과 목표값은 달라야 합니다.');
       check(text(v.resultUnit,30) && (v.resultTarget === null || v.resultUnit.trim()) && text(v.metricKey,160), '결과 단위와 기준을 확인하세요.');
-      check(g.level !== 'life' || [v.targetMinutes,v.dailyMinutes,v.resultTarget].every(n => n === null), '생애 목표에는 수치 진척을 사용하지 않습니다.');
+      check(g.level !== 'life' || [v.targetMinutes,v.dailyMinutes,v.resultTarget,v.resultStart].every(n => n == null), '생애 목표에는 수치 진척을 사용하지 않습니다.');
     }
   }
   for (const l of s.links) {

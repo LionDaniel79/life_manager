@@ -1,14 +1,24 @@
-const views = ['dashboard', 'record', 'budget', 'history', 'statistics', 'categories'];
+const views = ['dashboard', 'record', 'budget', 'goals', 'history', 'statistics', 'categories'];
 const titles = {
-  dashboard: '오늘',
-  record: '시간 기록',
-  budget: '목표 설정',
+  dashboard: '대시보드',
+  record: '시간기록',
+  budget: '시간예산',
+  goals: '목표설정',
   history: '기록 내역',
   statistics: '통계',
   categories: '앱 설정',
 };
 
 let activeView = 'dashboard';
+let statisticsMode = 'weekly';
+
+function syncGoalStatistics() {
+  const panel = document.querySelector('#life-statistics');
+  if (!panel) return;
+  const visible = activeView === 'statistics' && statisticsMode === 'goals';
+  panel.hidden = !visible;
+  panel.classList.toggle('hidden', !visible);
+}
 
 function setSidebarOpen(open) {
   const sidebar = document.querySelector('.sidebar');
@@ -44,6 +54,7 @@ function switchView(name, { save = true, force = false, closeSidebar = true } = 
   if (title) title.textContent = titles[safe] || '대시보드';
   if (closeSidebar) setSidebarOpen(false);
   activeView = safe;
+  syncGoalStatistics();
   if (save) {
     document.dispatchEvent(new CustomEvent('weekly-time-budget:save-ui-state', {
       detail: { activeView: safe },
@@ -65,9 +76,30 @@ document.addEventListener('click', (event) => {
   }
 
   const button = event.target.closest?.('.nav-button[data-view]');
-  if (!button) return;
+  if (!button) {
+    if (!event.target.closest?.('.sidebar')) setSidebarOpen(false);
+    return;
+  }
   event.preventDefault();
   switchView(button.dataset.view);
+});
+
+document.addEventListener('pointerdown', (event) => {
+  if (!event.target.closest?.('.sidebar, #mobile-menu')) setSidebarOpen(false);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') setSidebarOpen(false);
+});
+
+document.addEventListener('weekly-time-budget:statistics-mode-changed', (event) => {
+  statisticsMode = event.detail?.mode || 'weekly';
+  syncGoalStatistics();
+});
+
+document.addEventListener('weekly-time-budget:ui-state-restored', (event) => {
+  statisticsMode = event.detail?.statistics?.mode || 'weekly';
+  syncGoalStatistics();
 });
 
 document.addEventListener('weekly-time-budget:shell-state', (event) => {

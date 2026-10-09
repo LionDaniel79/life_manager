@@ -1,7 +1,7 @@
 import { getWeekRange } from './domain.js';
 import { coerceMonthlySelection } from './recorded-period-domain.js';
 
-const MODES = new Set(['weekly', 'monthly', 'yearly', 'monthly-comparison', 'yearly-comparison']);
+const MODES = new Set(['weekly', 'monthly', 'yearly', 'monthly-comparison', 'yearly-comparison', 'goals']);
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function validWeekStart(value, currentWeekStart) {
@@ -26,7 +26,7 @@ export function createStatisticsState({ now = new Date(), restored = {} } = {}) 
 }
 
 export function statisticsRenderKey(state) {
-  const period = state.mode === 'weekly'
+  const period = state.mode === 'goals' ? 'all' : state.mode === 'weekly'
     ? state.weekStart
     : state.mode === 'monthly'
       ? `${state.year}-${String(state.month).padStart(2, '0')}`

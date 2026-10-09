@@ -1,5 +1,7 @@
 # Life Manager: upstream integration
 
+The final v30 section supersedes earlier menu and standalone weight/review UI decisions.
+
 Approved 2026-10-09: extend weekly-time-budget, keep its time recording, budgets, scoring and statistics; add dated life/long/medium/short goals. Publish application source only. Personal planning and prototype remain local.
 
 Base: LionDaniel79/weekly-time-budget main eb183868a8e3301f18e5560da6298d58f020c0db. Remote `upstream` tracks the original; `origin` is life_manager. Prototype is preserved on local-only branch archive/local-prototype-v1. Never publish that branch or use push --all.
@@ -39,3 +41,13 @@ Base: LionDaniel79/weekly-time-budget main eb183868a8e3301f18e5560da6298d58f020c
 The latest request permits direct time-category links on both medium and short goals. Medium goals can retain child short goals as well. A time entry has one selected direct target; overlapping candidates require explicit attribution, and each ancestor counts the source once. Historical effective dates and optional targets remain unchanged. Schema v1 is extended by accepting medium targets; old short links and backups remain valid.
 
 Category achievement in weekly, monthly and yearly statistics uses compact horizontal bars. Preserve the original scores and signed restraint meaning: negative excess uses red hatching and explicit excess text; over-100% growth retains the true percentage with a capped bar. No budget means excluded, never a fabricated zero. Version v29 refreshes the application cache.
+
+## 2026-10-09 · v30 compact goals and navigation
+
+Six menus: Dashboard, Time recording, Time budgets, Goal settings, Statistics, App settings. Budgets precede goals; the original daily/weekly budgets and scores remain. Manual recording is minutes-only, field dimensions are consistent, and old mode preferences normalize to duration. Outside pointer events close mobile navigation, including WebKit taps that emit no click.
+
+Medium and other measurable goals accept baseline, target, unit, and dated absolute current values. Decreasing measures such as weight use (current − baseline)/(target − baseline). Missing measurements stay missing; reaching a target never auto-completes a goal. Earlier backups without a baseline remain supported.
+
+Compact goal cards support a collapsed archive and confirmed deletion. Deletion keeps historical metadata, child goals and source time records. Optional retainedEntryPaths preserve attribution of already-recorded entries on the retirement date while stopping new attribution. They store source IDs and paths only; source duration corrections stay live, and explicit reassignment clears retention. The attribution UI offers both alternate goals and clearing for preserved assignments.
+
+Goals are the sixth statistics mode, accessible during pending/failed time-data loads. Standalone weight/review UI is removed by request; existing stored arrays remain for backup compatibility. Original review findings about same-day totals and hidden correction controls were reproduced and resolved. Deployment identifier: 2026.10.09-life-v30. Final local and production verification evidence is kept in ignored local-data/latest-verification.json.

@@ -64,27 +64,12 @@ test('대분류 관리에서는 이름·목표방식·순서만 관리하고 기
   assert.match(categorySource, /goalType/);
 });
 
-test('수동 입력은 시각 범위와 분 직접 입력 방식을 제공한다', async () => {
-  const recordSource = await read('src/record-feature.js');
-  assert.match(recordSource, /manualInputMode:\s*MANUAL_INPUT_MODES\.TIME_RANGE/);
-  assert.match(recordSource, /manualCategoryId:\s*''/);
-  assert.match(recordSource, /data-manual-mode="time-range"/);
-  assert.match(recordSource, /data-manual-mode="duration"/);
-  assert.match(recordSource, /시작·종료 시각/);
-  assert.match(recordSource, /분 직접 입력/);
-  assert.match(recordSource, /id="manual-duration"/);
-  assert.match(recordSource, /<form id="manual-form" class="form-grid" novalidate>/);
+test('수동 입력은 분 입력만 제공한다', async () => {
+  const source=await read('src/record-feature.js');
+  assert.match(source, /id="manual-duration"/);
+  assert.doesNotMatch(source, /data-manual-mode|id="manual-start"|id="manual-end"|시작·종료 시각|분 직접 입력/);
 });
 
-test('방식 변경은 대분류를 유지하고 선택한 필드만 다시 그린다', async () => {
-  const recordSource = await read('src/record-feature.js');
-  assert.match(recordSource, /manualCategoryId:\s*\$\('#manual-category'\)\?\.value \|\| model\.manualCategoryId/);
-  assert.match(recordSource, /manualInputMode:\s*button\.dataset\.manualMode/);
-  assert.match(recordSource, /model\.manualInputMode\s*===\s*MANUAL_INPUT_MODES\.DURATION/);
-  assert.match(recordSource, /class="time-fields"/);
-  assert.match(recordSource, /class="duration-input-row"/);
-  assert.match(recordSource, /renderRecord\(\)/);
-});
 
 test('분 직접 입력은 별도 source로 저장하고 오류 문구를 표시한다', async () => {
   const recordSource = await read('src/record-feature.js');
@@ -94,12 +79,6 @@ test('분 직접 입력은 별도 source로 저장하고 오류 문구를 표시
   assert.match(recordSource, /alert\(error instanceof Error \? error\.message : String\(error\)\)/);
 });
 
-test('기존 시각 방식은 빈 시각과 잘못된 범위를 검사한다', async () => {
-  const recordSource = await read('src/record-feature.js');
-  assert.match(recordSource, /if \(!startTime \|\| !endTime\)/);
-  assert.match(recordSource, /minutesBetween\(startTime, endTime\)/);
-  assert.match(recordSource, /시간 범위를 확인하세요/);
-});
 
 test('기록 내역은 공통 formatter를 사용한다', async () => {
   const historySource = await read('src/history-feature.js');

@@ -23,10 +23,10 @@ test('신규 모듈과 연결 파일은 올바른 자바스크립트 문법이�
   }
 });
 
-test('목표 설정에 기존 일간·주간 시간 예산을 제공한다', async () => {
+test('시간예산 메뉴에 기존 일간·주간 시간 예산을 제공한다', async () => {
   const [html, feature] = await Promise.all([read('index.html'), read('src/time-budget-feature.js')]);
-  assert.match(html, /data-view="budget"[^>]*>목표 설정</);
-  assert.ok(feature.includes("textContent = '목표 설정'"));
+  assert.match(html, /data-view="budget"[^>]*>시간예산</);
+  assert.ok(feature.includes("textContent = '시간예산'"));
   assert.ok(html.includes('./src/time-budget-feature.js'));
 });
 

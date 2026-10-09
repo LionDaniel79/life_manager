@@ -29,6 +29,7 @@ if (root) {
   });
   const feature = createStatisticsFeature({
     root,
+    goalsRoot: document.querySelector('#life-statistics'),
     dataSource,
     getCurrentUser: () => auth.currentUser,
     saveUiState: async (partial) => {
@@ -72,7 +73,10 @@ if (root) {
   });
 
   authModule.onAuthStateChanged(auth, (user) => {
-    if (user) return;
+    if (user) {
+      if (statisticsVisible()) feature.enter();
+      return;
+    }
     currentView = 'dashboard';
     feature.leave();
     feature.refresh();

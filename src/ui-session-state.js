@@ -1,6 +1,5 @@
 const DASHBOARD_MODES = new Set(['daily', 'weekly']);
 const RECORD_TABS = new Set(['timer', 'manual']);
-const MANUAL_MODES = new Set(['time-range', 'duration']);
 const BUDGET_MODES = new Set(['today', 'week']);
 const STATISTICS_MODES = new Set([
   'weekly',
@@ -8,6 +7,7 @@ const STATISTICS_MODES = new Set([
   'yearly',
   'monthly-comparison',
   'yearly-comparison',
+  'goals',
 ]);
 
 function dateParts(dateKey) {
@@ -46,7 +46,7 @@ export function createDefaultUiState({
     },
     record: {
       tab: 'timer',
-      manualMode: 'time-range',
+      manualMode: 'duration',
     },
     budget: {
       mode: 'today',
@@ -63,7 +63,7 @@ export function createDefaultUiState({
 export function normalizeUiState(raw = {}, {
   today,
   currentWeekStart,
-  validViews = ['dashboard', 'record', 'budget', 'history', 'statistics', 'categories'],
+  validViews = ['dashboard', 'record', 'budget', 'goals', 'history', 'statistics', 'categories'],
 } = {}) {
   const defaults = createDefaultUiState({ today, currentWeekStart });
   const current = dateParts(defaults.dashboard.selectedDate);
@@ -108,9 +108,7 @@ export function normalizeUiState(raw = {}, {
     },
     record: {
       tab: RECORD_TABS.has(raw?.record?.tab) ? raw.record.tab : defaults.record.tab,
-      manualMode: MANUAL_MODES.has(raw?.record?.manualMode)
-        ? raw.record.manualMode
-        : defaults.record.manualMode,
+      manualMode: 'duration',
     },
     budget: {
       mode: BUDGET_MODES.has(raw?.budget?.mode) ? raw.budget.mode : defaults.budget.mode,
