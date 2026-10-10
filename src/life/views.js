@@ -16,7 +16,7 @@ export function goalCard(s,id,date,editable=false) {
   const controls=`${action('상세','detail',id,'text-button')}${numeric&&!archived?action('현재값 기록','result',id,'text-button'):''}${editable?`${action(archived?'보관 해제·수정':'수정·연결','edit',id,'text-button')}${!archived?action(s.homeGoalIds.includes(id)?'대시보드에서 숨김':'대시보드에 표시','home.toggle',id,'text-button'):''}${!archived&&s.homeGoalIds.includes(id)?`<span class="life-goal-order">${action('↑','home.up',id,'text-button')}${action('↓','home.down',id,'text-button')}</span>`:''}`:''}`;
   return `<article class="life-goal${editable?' life-goal-editable':''}" data-goal-id="${esc(id)}">
     <div class="life-goal-heading"><div class="life-row"><span class="badge">${LEVELS[g.level]}</span><strong>${esc(v.title)}</strong><span class="muted life-status">${status[v.status]}</span></div>${period?`<p class="life-caption life-repeat-period">${period.days}일 반복 · ${period.from} ~ ${period.to}</p>`:''}${parentName?`<p class="life-caption">상위: ${esc(parentName)}</p>`:''}${v.nextAction?`<p class="life-caption life-next">다음: ${esc(v.nextAction)}</p>`:''}</div>
-    <div class="life-goal-metrics">${g.level==='life'?`<p class="life-caption life-direction">${esc(v.reason||'삶의 방향')}</p>`:`${numericHtml}${timeHtml}${daily}`}</div>
+    <div class="life-goal-metrics">${g.level==='life'?`<p class="life-caption life-direction">${esc(v.reason||'삶의 방향')}</p><span class="life-caption">연결 시간 ${duration(minutes)}</span>`:`${numericHtml}${timeHtml}${daily}`}</div>
     <div class="life-actions life-goal-actions">${controls}</div>
   </article>`;
 }
@@ -28,7 +28,7 @@ export function home(s,date) {
 export function goals(s,date) {
   const current=listedGoals(s,date),archived=listedGoals(s,date,true);
   const cards=Object.keys(LEVELS).flatMap(level=>current.filter(g=>g.level===level).map(g=>goalCard(s,g.id,date,true))).join('');
-  return `<div class="section-title"><h2>삶의 방향과 목표</h2>${action('새 목표','new','','primary-button')}</div><p class="muted life-caption">생애 → 장기 → 중기·단기 · 단기 목표는 장기에도 직접 연결할 수 있습니다.</p><div class="life-grid">${cards||'<p>목표를 만들고 시간 기록 항목이나 숫자 기준을 설정하세요.</p>'}</div><details class="life-archive"><summary>보관 목표 · ${archived.length}개</summary><div class="life-grid">${archived.map(g=>goalCard(s,g.id,date,true)).join('')||'<p>보관한 목표가 없습니다.</p>'}</div></details>`;
+  return `<div class="section-title"><h2>삶의 방향과 목표</h2>${action('새 목표','new','','primary-button')}</div><p class="muted life-caption">생애 목표에는 장기·중기·단기와 기본 항목을 연결할 수 있습니다. 단기 목표는 장기에도 직접 연결할 수 있습니다.</p><div class="life-grid">${cards||'<p>목표를 만들고 시간 기록 항목이나 숫자 기준을 설정하세요.</p>'}</div><details class="life-archive"><summary>보관 목표 · ${archived.length}개</summary><div class="life-grid">${archived.map(g=>goalCard(s,g.id,date,true)).join('')||'<p>보관한 목표가 없습니다.</p>'}</div></details>`;
 }
 export function detail(s,id,date) {
   const g=s.goals.find(g=>g.id===id),v=goalVersion(g,date),r=goalSummary(s,id,date);

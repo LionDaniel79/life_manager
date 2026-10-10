@@ -68,7 +68,7 @@ function repeatSettings() {
     ? `${days}일 간격 · ${period.from>localDate()?'첫':'현재'} 기간: ${period.from} ~ ${period.to} · 다음: ${addDays(period.to,1)} ~ ${addDays(period.to,days)}. 시간·숫자 목표는 매 기간의 기준입니다.`
     : repeat?'반복할 기간의 시작일과 종료일을 입력하세요.':'반복을 켜면 설정한 기간의 길이만큼 계속 이어집니다.';
 }
-function impact(){const f=dialog.querySelector('[data-life-form="goal"]');if(!f)return;const date=f.elements.effectiveDate.value;const count=state.entries.filter(e=>e.date>=date).length;f.querySelector('#life-impact').textContent=`${date} 이후 기록 ${count}건이 있습니다. 연결된 활동·목표 기간에 맞는 기록만 반영됩니다. 여러 중기·단기 목표가 겹치면 시간기록 메뉴에서 직접 배정합니다.`;}
+function impact(){const f=dialog.querySelector('[data-life-form="goal"]');if(!f)return;const date=f.elements.effectiveDate.value;const count=state.entries.filter(e=>e.date>=date).length;f.querySelector('#life-impact').textContent=`${date} 이후 기록 ${count}건이 있습니다. 연결된 활동·목표 기간에 맞는 기록만 반영됩니다. 여러 목표가 겹치면 시간기록 메뉴에서 직접 배정합니다.`;}
 function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 document.addEventListener('weekly-time-budget:infrastructure-state',event=>{

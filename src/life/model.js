@@ -42,7 +42,7 @@ export function applyLife(state, action, today=localDate()) {
   if (action.type==='assignment.save') {
     s=structuredClone(state);
     const entry=s.entries.find(e=>e.id===action.entryId);
-    if (!entry || action.goalId && !linkedActivityGoals(s,entry.categoryId,entry.date).some(g=>g.id===action.goalId)) throw Error('기록일에 연결된 중기·단기 목표를 선택하세요.');
+    if (!entry || action.goalId && !linkedActivityGoals(s,entry.categoryId,entry.date).some(g=>g.id===action.goalId)) throw Error('기록일에 항목과 연결된 목표를 선택하세요.');
     s.assignments=s.assignments.filter(a=>a.entryId!==action.entryId);
     s.retainedEntryPaths=(s.retainedEntryPaths||[]).filter(p=>p.entryId!==action.entryId);
     s.assignments.push({entryId:action.entryId,goalId:action.goalId || null});

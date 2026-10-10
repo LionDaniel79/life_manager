@@ -1,6 +1,6 @@
 import { cacheModuleGraph, networkFirstWithDeadline } from './src/service-worker-cache.js';
 
-const APP_BUILD = '2026.10.10-life-v32';
+const APP_BUILD = '2026.10.10-life-v33';
 const SHELL_CACHE = `life-manager-shell-${APP_BUILD}`;
 // const SHELL_CACHE = 'life-manager-shell-v16';
 const RUNTIME_CACHE = 'life-manager-firebase-v1';

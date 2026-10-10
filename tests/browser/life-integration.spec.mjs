@@ -77,6 +77,35 @@ test('long goal groups medium and short children and medium separates basic cate
   await expect(d.getByRole('group',{name:'하위 단기 목표',exact:true})).toBeVisible();
   await expect(d.getByRole('group',{name:'기본 항목 (시간 기록)',exact:true})).toBeVisible();
 });
+for(const width of [390,1200])test(`life connects all lower levels and activities in separate groups at ${width}px`,async({page})=>{
+  await open(page,width);await nav(page,'goals');
+  await newGoal(page,'삶의 방향','life');await newGoal(page,'장기 배움','long');
+  await newGoal(page,'중기 배움','medium');await newGoal(page,'단기 배움','short','','2');
+  const life=page.locator('#life-goals .life-goal').filter({has:page.locator('strong').filter({hasText:'삶의 방향'})});
+  await life.getByRole('button',{name:'수정·연결',exact:true}).click();
+  const d=page.locator('#life-dialog');
+  for(const [group,label] of [['하위 장기 목표','장기 배움'],['하위 중기 목표','중기 배움'],['하위 단기 목표','단기 배움'],['기본 항목 (시간 기록)','독서']])await d.getByRole('group',{name:group,exact:true}).getByLabel(label,{exact:true}).check();
+  await d.locator('[name="confirmLinks"]').check();await d.locator('[name="confirmRetroactive"]').check();
+  await d.getByRole('button',{name:'저장',exact:true}).click();await expect(d).not.toBeVisible();
+  for(const title of ['장기 배움','중기 배움','단기 배움'])await expect(page.locator('#life-goals .life-goal').filter({has:page.locator('strong').filter({hasText:title})})).toContainText('상위: 삶의 방향');
+  await nav(page,'record');await page.getByText('목표별 시간 배정 · 1건 선택 필요',{exact:true}).click();
+  await page.locator('[data-life-assignment="e1"]').selectOption({label:'생애 · 삶의 방향'});
+  await nav(page,'dashboard');
+  const card=page.locator('#life-home .life-goal').filter({has:page.locator('strong').filter({hasText:'삶의 방향'})});
+  await expect(card).toContainText('연결 시간 1시간');await expect(card.getByRole('progressbar')).toHaveCount(0);
+  await nav(page,'record');await page.getByText('목표별 시간 배정 · 0건 선택 필요',{exact:true}).click();
+  await page.locator('[data-life-assignment="e1"]').selectOption({label:'단기 · 단기 배움'});
+  await page.reload();await nav(page,'dashboard');await expect(card).toContainText('연결 시간 1시간');
+  await nav(page,'goals');
+  for(const title of ['중기 배움','단기 배움']){
+    await page.locator('#life-goals .life-goal').filter({has:page.locator('strong').filter({hasText:title})}).getByRole('button',{name:'수정·연결',exact:true}).click();
+    await expect(d.locator('[name="parentId"] option:checked')).toHaveText('삶의 방향');
+    await expect(d.locator('[name="parentId"] optgroup[label="생애 목표"]')).toHaveCount(1);
+    await d.getByRole('button',{name:'취소',exact:true}).click();
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 test('hierarchy, original manual recording, budgets, scores and five statistics modes work together',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));await open(page);await expect(page.locator('nav .nav-button')).toHaveCount(6);
   await nav(page,'goals');await newGoal(page,'장기 연구','long','','2');await newGoal(page,'중기 연구','medium','장기 연구');await newGoal(page,'단기 독서','short','중기 연구');

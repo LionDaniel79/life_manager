@@ -93,8 +93,8 @@ test('medium relinking preserves earlier paths and late records follow their rec
   assert.equal(goalSummary(s,'m',date).minutes,90);
 });
 
-test('activity links and explicit assignments still reject life and long goals',()=>{
-  for(const level of ['life','long']){
+test('activity links and explicit assignments still reject long goals',()=>{
+  for(const level of ['long']){
     const s=hydrateLife(null,infra,date);
     const action={type:'goal.save',id:'g',level,title:level,effectiveDate:date,startDate:date};
     assert.throws(()=>applyLife(s,{...action,categoryIds:['reading']},date));

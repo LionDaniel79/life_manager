@@ -8,7 +8,8 @@ export function linkFields(s,level,id,date) {
   const parent=links.find(l=>l.kind==='hierarchy'&&l.fromId===id)?.toId||'';
   const available=g=>!g.deletedDate&&goalVersion(g,date)&&goalVersion(g,date).status!=='archived';
   const parents=s.goals.filter(g=>canParent(level,g.level)&&available(g));
-  const parentOptions=level==='short'?['medium','long'].map(type=>`<optgroup label="${LEVELS[type]} 목표">${parents.filter(g=>g.level===type).map(g=>option(g.id,goalVersion(g,date).title,parent)).join('')}</optgroup>`).join(''):parents.map(g=>option(g.id,goalVersion(g,date).title,parent)).join('');
+  const parentLevels=['medium','long','life'].filter(type=>canParent(level,type));
+  const parentOptions=parentLevels.length>1?parentLevels.map(type=>`<optgroup label="${LEVELS[type]} 목표">${parents.filter(g=>g.level===type).map(g=>option(g.id,goalVersion(g,date).title,parent)).join('')}</optgroup>`).join(''):parents.map(g=>option(g.id,goalVersion(g,date).title,parent)).join('');
   const parentField=level==='life'?'':select('상위 목표','parentId',option('','연결하지 않음',parent)+parentOptions);
   const childFields=Object.keys(LEVELS).filter(type=>canParent(type,level)).map(type=>{
     const children=s.goals.filter(g=>g.level===type&&available(g));
@@ -18,7 +19,7 @@ export function linkFields(s,level,id,date) {
       return checkbox(goalVersion(g,date).title,'childIds',false,g.id)+caption;
     }).join(''):'<p class="muted">목표를 만든 후 연결할 수 있습니다.</p>'}</fieldset>`;
   }).join('');
-  const activityFields=canLinkActivity(level)?`<fieldset><legend>기본 항목 (시간 기록)</legend>${s.categories.filter(c=>!c.archived).map(c=>checkbox(c.name,'categoryIds',false,c.id)).join('')||'<p class="muted">앱 설정에서 시간 기록 항목을 추가하세요.</p>'}<p class="muted">같은 항목이 여러 중기·단기 목표에 연결되면 시간기록 메뉴에서 반영할 목표를 선택합니다. 상위 목표에는 한 번만 합산됩니다.</p></fieldset>`:'';
+  const activityFields=canLinkActivity(level)?`<fieldset><legend>기본 항목 (시간 기록)</legend>${s.categories.filter(c=>!c.archived).map(c=>checkbox(c.name,'categoryIds',false,c.id)).join('')||'<p class="muted">앱 설정에서 시간 기록 항목을 추가하세요.</p>'}<p class="muted">같은 항목이 여러 목표에 연결되면 시간기록 메뉴에서 반영할 목표를 선택합니다. 상위 목표에는 한 번만 합산됩니다.</p></fieldset>`:'';
   return `${parentField}${childFields}${activityFields}${checkbox('위에서 선택한 연결을 적용합니다','confirmLinks')}<p class="muted">상위 목표는 하나만 연결합니다. 다른 상위에 연결된 하위 목표를 선택하면 적용일부터 이 목표로 옮깁니다. 이전 날짜의 시간은 당시 경로에 남습니다.</p><p class="muted">수정 시 이 목표의 기존 직접 연결은 종료됩니다. 계속 사용할 하위 목표·활동도 다시 선택하세요. 하위 목표의 다른 연결은 유지됩니다.</p>`;
 }
 export function goalForm(s,id,date) {

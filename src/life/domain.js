@@ -2,8 +2,8 @@ const DAY = 86400000;
 const OFFSET = 9 * 3600000;
 export const LEVELS = { life: '생애', long: '장기', medium: '중기', short: '단기' };
 export const PARENT = { long: 'life', medium: 'long', short: 'medium' };
-export const canParent = (child, parent) => Boolean(PARENT[child] && (PARENT[child] === parent || child === 'short' && parent === 'long'));
-export const canLinkActivity = level => level === 'medium' || level === 'short';
+export const canParent = (child, parent) => Boolean(PARENT[child] && (parent === 'life' || PARENT[child] === parent || child === 'short' && parent === 'long'));
+export const canLinkActivity = level => ['life','medium','short'].includes(level);
 export function comparisonRange(from,to,mode='custom') {
   if(mode==='week') return {from:addDays(from,-7),to:addDays(to,-7)};
   if(mode==='month') {
@@ -92,7 +92,7 @@ export function pathForEntry(s, entry) {
   while (id && !path.includes(id)) {
     const goal = s.goals.find(g => g.id === id);
     const v = goalVersion(goal, entry.date);
-    if (!v || goalIsDeleted(goal,entry.date) || goal.level === 'life' || v.status !== 'active' || !inGoalRange(entry.date,v)) break;
+    if (!v || goalIsDeleted(goal,entry.date) || v.status !== 'active' || !inGoalRange(entry.date,v)) break;
     path.push(id);
     id = s.links.find(l => l.kind === 'hierarchy' && l.fromId === id && activeLink(l, entry.date))?.toId;
   }
@@ -173,10 +173,10 @@ function saveEntry(s, a, allowArchived = false) {
   let goalId = a.goalId;
   if (goalId === undefined) {
     const choices = linkedActivityGoals(s, category.id, a.date);
-    check(choices.length <= 1, '연결 가능한 중기·단기 목표가 여러 개입니다. 하나를 선택하세요.');
+    check(choices.length <= 1, '연결 가능한 목표가 여러 개입니다. 하나를 선택하세요.');
     goalId = choices[0]?.id ?? null;
   }
-  if (goalId) check(linkedActivityGoals(s, category.id, a.date).some(g => g.id === goalId) || (existing?.goalId === goalId && existing.date === a.date && existing.categoryId === a.categoryId), '해당 날짜에 항목과 연결된 중기·단기 목표를 선택하세요.');
+  if (goalId) check(linkedActivityGoals(s, category.id, a.date).some(g => g.id === goalId) || (existing?.goalId === goalId && existing.date === a.date && existing.categoryId === a.categoryId), '해당 날짜에 항목과 연결된 목표를 선택하세요.');
   if (existing && (existing.goalId !== (goalId || null) || existing.date !== a.date || existing.categoryId !== a.categoryId)) s.retainedEntryPaths = (s.retainedEntryPaths || []).filter(p => p.entryId !== existing.id);
   upsert(s.entries, { id: a.id || uid(), categoryId: category.id, categoryName: existing?.categoryId === category.id ? existing.categoryName : category.name, date: a.date, durationMinutes, goalId: goalId || null, note: clean(a.note), source: a.source || existing?.source || 'manual', startTime: a.startTime || '', endTime: a.endTime || '', updatedAt: new Date().toISOString() });
 }
@@ -358,7 +358,7 @@ export function validateState(s) {
   const cat = id => s.categories.find(c => c.id === id), goal = id => s.goals.find(g => g.id === id);
   const retained = s.retainedEntryPaths ?? [];
   check(Array.isArray(retained) && retained.length <= 200000 && new Set(retained.map(p => p?.entryId)).size === retained.length,'보존된 시간 연결 목록이 올바르지 않습니다.');
-  for (const p of retained) check(p && text(p.entryId,200) && p.entryId.length > 0 && cat(p.categoryId) && validDate(p.date) && Array.isArray(p.goalIds) && p.goalIds.length > 0 && p.goalIds.length <= 3 && canLinkActivity(goal(p.goalIds[0])?.level) && p.goalIds.every((id,i) => goal(id) && goal(id).level !== 'life' && (!i || canParent(goal(p.goalIds[i-1]).level,goal(id).level))),'보존된 시간 연결 경로가 올바르지 않습니다.');
+  for (const p of retained) check(p && text(p.entryId,200) && p.entryId.length > 0 && cat(p.categoryId) && validDate(p.date) && Array.isArray(p.goalIds) && p.goalIds.length > 0 && p.goalIds.length <= 4 && canLinkActivity(goal(p.goalIds[0])?.level) && p.goalIds.every((id,i) => goal(id) && (!i || canParent(goal(p.goalIds[i-1]).level,goal(id).level))),'보존된 시간 연결 경로가 올바르지 않습니다.');
   for (const c of s.categories) check(text(c.name,80) && c.name.trim() && ['growth','restraint'].includes(c.type) && typeof c.archived === 'boolean' && num(c.order) && (c.budgetMinutes === null || num(c.budgetMinutes,0,10080)) && ['day','week'].includes(c.budgetPeriod), '활동 항목 형식이 올바르지 않습니다.');
   for (const g of s.goals) {
     check(Object.hasOwn(LEVELS,g.level) && Array.isArray(g.versions) && g.versions.length > 0, '목표 단계/기준이 잘못되었습니다.');
@@ -379,7 +379,7 @@ export function validateState(s) {
   }
   for (const l of s.links) {
     check(validDate(l.validFrom) && (l.validTo === null || validDate(l.validTo) && l.validTo >= l.validFrom), '연결 적용 날짜가 잘못되었습니다.');
-    check(l.kind === 'activity' ? cat(l.fromId) && canLinkActivity(goal(l.toId)?.level) : l.kind === 'hierarchy' && goal(l.fromId) && goal(l.toId) && canParent(goal(l.fromId).level,goal(l.toId).level), '상위 단계의 목표에 연결하세요. 단기 목표는 중기 또는 장기에, 시간 기록 항목은 중기·단기에 연결할 수 있습니다.');
+    check(l.kind === 'activity' ? cat(l.fromId) && canLinkActivity(goal(l.toId)?.level) : l.kind === 'hierarchy' && goal(l.fromId) && goal(l.toId) && canParent(goal(l.fromId).level,goal(l.toId).level), '상위 단계의 목표에 연결하세요. 생애 목표에는 모든 하위 단계와 항목을, 시간 기록 항목은 생애·중기·단기에 연결할 수 있습니다.');
   }
   const overlap = (a,b) => a.validFrom < (b.validTo || '9999') && b.validFrom < (a.validTo || '9999') && a.validFrom !== a.validTo && b.validFrom !== b.validTo;
   for (let i=0;i<s.links.length;i++) for (let j=i+1;j<s.links.length;j++) {

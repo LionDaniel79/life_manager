@@ -1,6 +1,6 @@
 # Life Manager: upstream integration
 
-The final v30–v32 sections supersede earlier menu, hierarchy, card layout, standalone weight/review UI and install identity decisions.
+The final v30–v33 sections supersede earlier menu, hierarchy, card layout, standalone weight/review UI and install identity decisions.
 
 Approved 2026-10-09: extend weekly-time-budget, keep its time recording, budgets, scoring and statistics; add dated life/long/medium/short goals. Publish application source only. Personal planning and prototype remain local.
 
@@ -63,3 +63,9 @@ Production manifests for both apps used id './', which Chromium actually compute
 Short goals optionally repeat their inclusive initial start/end duration, not calendar weeks/months: Sep 1–15, Sep 16–30, Oct 1–15. Optional version.repeat defaults false for legacy data. Period progress resets by calculation; source records, dated attribution and ancestor cumulative totals remain. No scheduled writes or duplicated goals. Current/next dates appear in the editor and current dates on cards; details show the latest 12 periods. Numeric values require a measurement in each period. Inactive status freezes rollover. The shared eligibility/path logic extends repeated goals past their initial end.
 
 Long goals can directly select medium and short children in distinct groups; medium separates short children and basic time categories. canParent extends the existing hierarchy with short→long. Each child has one dated parent; selecting a previously parented child moves it from the effective date and keeps historic paths. Retained archive/delete paths accept this relationship. Existing time recording/budgets/scores and Firebase collections are unchanged.
+
+## 2026-10-10 · v33 life direction connections
+
+Life directions can select long, medium, short and basic activity categories in four separate groups. Medium/short parent selectors include life. The one-parent rule and dated reparenting remain. Activity targets are life/medium/short; long activity links remain unsupported.
+
+Paths now include life as their final ancestor, or life alone for direct attribution. Its card displays connected time as reference, never an achievement percentage or numeric target. Overlapping life/child activity links require one explicit entry assignment, and each ancestor counts the source once. Retained paths accept up to four levels and singleton life paths. Existing retained paths remain unchanged rather than retroactively appending life. Original time sources and budget/statistics behavior are preserved.
