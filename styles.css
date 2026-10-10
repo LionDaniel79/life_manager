@@ -94,13 +94,27 @@ h1,h2,h3,p { margin-top: 0; }
 .dashboard-tabs .tab-button,.time-budget-tabs .tab-button { min-width: 110px; }
 .period-navigation { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 12px; align-items: center; margin-bottom: 18px; }
 .period-navigation strong { min-width: 0; padding: 11px 14px; border: 1px solid #d7ddd8; border-radius: 12px; background: #fffdf7; text-align: center; overflow-wrap: anywhere; }
-.daily-navigation { grid-template-columns: auto minmax(0,1fr) auto auto; }
+.daily-navigation { grid-template-columns: minmax(0,1fr) repeat(3,auto); gap: 8px; margin-bottom: 12px; }
+.daily-navigation button { min-width: 0; padding: 8px 14px; white-space: nowrap; }
 .today-button { color: #2b7665; font-weight: 800; }
-.dashboard-summary { margin-bottom: 18px; }
-.dashboard-category-card { margin-top: 18px; }
-.dashboard-category-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(130px,auto) 64px; gap: 14px; align-items: center; padding: 14px 0; border-bottom: 1px solid #e5e6df; }
+.dashboard-summary { gap: 8px; margin-bottom: 8px; }
+.dashboard-summary .card { padding: 12px 14px; border-radius: 14px; }
+.dashboard-summary .muted { margin: 0; font-size: .85rem; }
+.dashboard-summary .metric { margin: 4px 0 0; font-size: 1.5rem; line-height: 1.25; word-break: keep-all; }
+.dashboard-summary-note { margin: 0; font-size: .8rem; }
+.dashboard-category-card { margin-top: 12px; padding: 14px 16px; }
+.dashboard-category-card .section-title { margin-bottom: 4px; gap: 8px; }
+.dashboard-category-card h2 { margin: 0; font-size: 1.1rem; }
+.dashboard-category-card .badge { flex-shrink: 0; }
+.dashboard-category-row { display: grid; gap: 4px; padding: 9px 0; border-bottom: 1px solid #e5e6df; }
 .dashboard-category-row:last-child { border-bottom: 0; }
-.dashboard-category-row small { display: block; margin: 3px 0 8px; color: #75827d; }
+.dashboard-category-heading,.dashboard-category-detail { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 10px; }
+.dashboard-category-name { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; overflow-wrap: anywhere; }
+.dashboard-category-heading { font-size: .9rem; }
+.dashboard-achievement-text { flex-shrink: 0; font-size: .8rem; }
+.dashboard-category-row small { margin: 0; color: #75827d; font-size: .75rem; }
+.dashboard-category-row .progress { height: 7px; }
+.dashboard-category-detail { flex-wrap: wrap; font-size: .8rem; }
 .daily-dashboard-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(280px,420px); gap: 18px; align-items: start; }
 .record-calendar { width: 100%; max-width: 420px; padding: 18px; border: 1px solid #dce0d8; border-radius: 20px; background: #fffdf7; }
 .record-calendar-header { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; align-items: center; gap: 8px; margin-bottom: 12px; text-align: center; }
@@ -133,6 +147,8 @@ h1,h2,h3,p { margin-top: 0; }
   .main-content { padding: 22px 16px; }
   .mobile-menu { display: block; min-height: 44px; border: 1px solid #ccd4cf; background: white; border-radius: 10px; padding: 9px 12px; }
   .grid-2,.grid-3 { grid-template-columns: 1fr; }
+  .dashboard-summary .card { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; }
+  .dashboard-summary .metric { margin: 0; font-size: 1.4rem; text-align: right; }
   .budget-row { grid-template-columns: 1fr 1fr; }
   .entry { grid-template-columns: 90px minmax(0,1fr); }
   .entry .entry-actions { grid-column: 2; }
@@ -150,12 +166,10 @@ h1,h2,h3,p { margin-top: 0; }
   .card { padding: 16px; }
   .dashboard-tabs,.time-budget-tabs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .dashboard-tabs .tab-button,.time-budget-tabs .tab-button { min-width: 0; width: 100%; }
-  .period-navigation,.daily-navigation { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .period-navigation { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .daily-navigation { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .period-navigation strong { grid-column: 1/-1; grid-row: 1; }
-  .daily-navigation .today-button { grid-column: 1/-1; }
-  .dashboard-category-row { grid-template-columns: 1fr auto; }
-  .dashboard-category-row>strong { grid-column: 2; grid-row: 1; }
-  .dashboard-category-row>span { grid-column: 1/-1; }
+  .dashboard-category-card { padding: 12px 14px; }
   .time-budget-category-row { grid-template-columns: 1fr; }
   .record-calendar { padding: 13px; }
   .record-calendar-grid button,.record-calendar-grid>span { min-height: 38px; }

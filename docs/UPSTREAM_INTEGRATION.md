@@ -1,6 +1,6 @@
 # Life Manager: upstream integration
 
-The final v30–v33 sections supersede earlier menu, hierarchy, card layout, standalone weight/review UI and install identity decisions.
+The final v30–v34 sections supersede earlier menu, hierarchy, card layout, standalone weight/review UI and install identity decisions.
 
 Approved 2026-10-09: extend weekly-time-budget, keep its time recording, budgets, scoring and statistics; add dated life/long/medium/short goals. Publish application source only. Personal planning and prototype remain local.
 
@@ -69,3 +69,7 @@ Long goals can directly select medium and short children in distinct groups; med
 Life directions can select long, medium, short and basic activity categories in four separate groups. Medium/short parent selectors include life. The one-parent rule and dated reparenting remain. Activity targets are life/medium/short; long activity links remain unsupported.
 
 Paths now include life as their final ancestor, or life alone for direct attribution. Its card displays connected time as reference, never an achievement percentage or numeric target. Overlapping life/child activity links require one explicit entry assignment, and each ancestor counts the source once. Retained paths accept up to four levels and singleton life paths. Existing retained paths remain unchanged rather than retroactively appending life. Original time sources and budget/statistics behavior are preserved.
+
+## 2026-10-10 · v34 compact dashboard
+
+Daily navigation puts Previous / Today / Next buttons on one row in both DOM and visual order, with a full date row above on phones and 44px touch targets. Dashboard summaries use reduced padding and horizontal label/value rows on phones. Category achievement rows retain names, budget source, percentages, progress bars, actual/budget times and difference text in a compact layout with wrapping for long content. Daily and weekly dashboards share the change. Only presentation changed; calculations, date navigation callbacks and source data are unchanged.

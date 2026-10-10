@@ -162,12 +162,12 @@ function renderSummaryCards(summary, budgetLabel) {
     <article class="card"><p class="muted">목표 준수</p><div class="metric">${goalScoreText(summary)}</div></article>
     <article class="card"><p class="muted">${budgetLabel}</p><div class="metric">${formatMinutes(summary.totalBudgetMinutes)}</div></article>
     <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(summary.totalActualMinutes)}</div></article>
-  </div><p class="muted">※ 시간 합계와 평균은 절제 목표를 제외하여 계산합니다.</p>`;
+  </div><p class="muted dashboard-summary-note">※ 시간 합계와 평균은 절제 목표를 제외하여 계산합니다.</p>`;
 }
 
 function renderCategorySummary(summary) {
   const items = summary.categorySummaries || [];
-  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '이번 주 예산 균등 배분'}</small>` : ''}${categoryProgressHtml(item)}<small class="goal-detail">${categoryGoalDetail(item)}</small></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
+  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div class="dashboard-category-heading"><div class="dashboard-category-name"><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '이번 주 예산 균등 배분'}</small>` : ''}</div><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>${categoryProgressHtml(item)}<div class="dashboard-category-detail"><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><small class="goal-detail">${categoryGoalDetail(item)}</small></div></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
 }
 
 function renderCalendar(model) {
@@ -191,7 +191,7 @@ export function renderDashboardHtml(model) {
   }
   const previousDisabled = !model.previousDate;
   const nextDisabled = model.selectedDate >= model.today;
-  return `${renderDashboardTabs(mode)}<div class="period-navigation daily-navigation"><button type="button" class="secondary-button" data-date-direction="prev" ${previousDisabled ? 'disabled' : ''}>전날</button><strong>${escapeHtml(model.selectedDate)}</strong><button type="button" class="secondary-button" data-date-direction="next" ${nextDisabled ? 'disabled' : ''}>다음날</button><button type="button" class="text-button today-button" data-dashboard-today ${model.selectedDate === model.today ? 'disabled' : ''}>오늘</button></div><div class="daily-dashboard-layout"><div>${renderSummaryCards(model.dailySummary, '적용 예산')}${renderCategorySummary(model.dailySummary)}</div>${renderCalendar(model)}</div>`;
+  return `${renderDashboardTabs(mode)}<div class="period-navigation daily-navigation"><strong>${escapeHtml(model.selectedDate)}</strong><button type="button" class="secondary-button" data-date-direction="prev" ${previousDisabled ? 'disabled' : ''}>전날</button><button type="button" class="secondary-button today-button" data-dashboard-today ${model.selectedDate === model.today ? 'disabled' : ''}>오늘</button><button type="button" class="secondary-button" data-date-direction="next" ${nextDisabled ? 'disabled' : ''}>다음날</button></div><div class="daily-dashboard-layout"><div>${renderSummaryCards(model.dailySummary, '적용 예산')}${renderCategorySummary(model.dailySummary)}</div>${renderCalendar(model)}</div>`;
 }
 
 export function bindDashboardControls({ root, state, rerender, onPreviousDate, onNextDate, onSelectDate, onCalendarMove, onWeekMove }) {
