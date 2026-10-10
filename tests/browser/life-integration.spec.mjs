@@ -12,6 +12,71 @@ async function newGoal(page,title,level,parent='',hours=''){
   if(level==='short')await d.locator('[name="categoryIds"][value="reading"]').check();
   await d.locator('[name="confirmLinks"]').check();await d.locator('[name="confirmRetroactive"]').check();await d.locator('[name="showHome"]').check();await d.getByRole('button',{name:'저장',exact:true}).click();await expect(d).not.toBeVisible();
 }
+
+test('short repeat form persists its exact inclusive span and rolls at midnight without writing',async({page})=>{
+  await page.clock.install({time:new Date('2026-09-15T23:59:30+09:00')});
+  await open(page,390);await nav(page,'goals');
+  await newGoal(page,'누적 성장','medium','','10');
+  await page.locator('[data-life="new"]').click();
+  const d=page.locator('#life-dialog');
+  await expect(d.locator('[name="repeat"]')).not.toBeVisible();
+  await d.locator('[name="level"]').selectOption('short');
+  await d.locator('[name="title"]').fill('15일 독서');
+  await d.locator('[name="startDate"]').fill('2026-09-01');
+  await d.locator('[name="endDate"]').fill('2026-09-15');
+  await d.getByLabel('설정한 기간으로 반복').check();
+  await expect(d.locator('#life-repeat-help')).toContainText('15일');
+  await expect(d.locator('#life-repeat-help')).toContainText('2026-09-16 ~ 2026-09-30');
+  await d.locator('[name="hours"]').fill('2');
+  await d.locator('[name="parentId"]').selectOption({label:'누적 성장'});
+  await d.getByLabel('독서',{exact:true}).check();
+  await d.locator('[name="confirmLinks"]').check();await d.locator('[name="confirmRetroactive"]').check();await d.locator('[name="showHome"]').check();
+  await d.getByRole('button',{name:'저장',exact:true}).click();await expect(d).not.toBeVisible();
+  const card=page.locator('#life-goals .life-goal').filter({hasText:'15일 독서'});
+  await expect(card).toContainText('2026-09-01 ~ 2026-09-15');await expect(card).toContainText('50%');
+  const saves=await page.evaluate(()=>__lifeHarness.saves);
+  await card.getByRole('button',{name:'상세',exact:true}).click();
+  await page.clock.fastForward(35000);
+  await page.evaluate(()=>__lifeHarness.publish());
+  await page.clock.runFor(61000);
+  await expect(card).toContainText('2026-09-16 ~ 2026-09-30');
+  await expect(card).toContainText('0분');
+  expect(await page.evaluate(()=>__lifeHarness.saves)).toBe(saves);
+  await expect(page.locator('#life-goals .life-goal').filter({has:page.locator('strong').filter({hasText:'누적 성장'})})).toContainText('1시간');
+  await expect(d.locator('.life-repeat-period')).toContainText('2026-09-16 ~ 2026-09-30');
+  await d.getByText('반복 기간별 기록 · 최근 2회',{exact:true}).click();
+  await expect(d.locator('.life-period-history')).toContainText('2026-09-01 ~ 2026-09-15');
+  await expect(d.locator('.life-period-history')).toContainText('50%');
+  await d.getByRole('button',{name:'닫기',exact:true}).click();
+  await page.reload();await nav(page,'goals');
+  await expect(card).toContainText('2026-09-16 ~ 2026-09-30');
+  await card.getByRole('button',{name:'수정·연결',exact:true}).click();
+  await expect(d.getByLabel('설정한 기간으로 반복')).toBeChecked();
+  await expect(d.locator('[name="startDate"]')).toHaveValue('2026-09-01');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('long goal groups medium and short children and medium separates basic categories',async({page})=>{
+  await open(page);await nav(page,'goals');
+  await newGoal(page,'상위 성장','long');await newGoal(page,'중간 성장','medium','상위 성장');await newGoal(page,'직접 단기','short','중간 성장','2');
+  const parent=page.locator('#life-goals .life-goal').filter({has:page.locator('strong').filter({hasText:'상위 성장'})});
+  await parent.getByRole('button',{name:'수정·연결',exact:true}).click();
+  const d=page.locator('#life-dialog');
+  await d.getByRole('group',{name:'하위 중기 목표',exact:true}).getByLabel('중간 성장',{exact:true}).check();
+  await d.getByRole('group',{name:'하위 단기 목표',exact:true}).getByLabel('직접 단기',{exact:true}).check();
+  await expect(d.locator('#life-links')).toContainText('상위 목표는 하나');
+  await d.locator('[name="confirmLinks"]').check();await d.locator('[name="confirmRetroactive"]').check();
+  await d.getByRole('button',{name:'저장',exact:true}).click();await expect(d).not.toBeVisible();
+  await expect(parent).toContainText('1시간');
+  const child=page.locator('#life-goals .life-goal').filter({hasText:'직접 단기'});
+  await expect(child).toContainText('상위: 상위 성장');
+  await child.getByRole('button',{name:'수정·연결',exact:true}).click();
+  await expect(d.locator('[name="parentId"] option:checked')).toHaveText('상위 성장');
+  await d.getByRole('button',{name:'취소',exact:true}).click();
+  await page.locator('#life-goals .life-goal').filter({hasText:'중간 성장'}).getByRole('button',{name:'수정·연결',exact:true}).click();
+  await expect(d.getByRole('group',{name:'하위 단기 목표',exact:true})).toBeVisible();
+  await expect(d.getByRole('group',{name:'기본 항목 (시간 기록)',exact:true})).toBeVisible();
+});
 test('hierarchy, original manual recording, budgets, scores and five statistics modes work together',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));await open(page);await expect(page.locator('nav .nav-button')).toHaveCount(6);
   await nav(page,'goals');await newGoal(page,'장기 연구','long','','2');await newGoal(page,'중기 연구','medium','장기 연구');await newGoal(page,'단기 독서','short','중기 연구');

@@ -115,7 +115,7 @@ test('structural validation rejects duplicate IDs, foreign references and invali
   const duplicate = structuredClone(s);
   duplicate.categories.push(duplicate.categories[0]);
   assert.throws(() => validateState(duplicate));
-  assert.throws(() => goal(s, 'bad', 'short', 'long', ['thesis']));
+  assert.throws(() => goal(s, 'bad', 'long', 'short', ['thesis']));
   const bad = entry(s, 'e', today, 10);
   bad.entries[0].categoryId = 'missing';
   assert.throws(() => validateState(bad));

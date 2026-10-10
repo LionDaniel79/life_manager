@@ -31,8 +31,8 @@ test('안정화 빌드 v27가 모든 실행 자산에 적용된다', async () =>
   const [html, worker, registration] = await Promise.all([
     read('index.html'), read('service-worker.js'), read('src/service-worker-registration.js'),
   ]);
-  assert.match(html, /data-app-build="2026\.10\.10-life-v31"/);
-  assert.match(html, /앱 버전 v31/);
-  assert.match(worker, /APP_BUILD = '2026\.10\.10-life-v31'/);
-  assert.match(registration, /APP_BUILD = '2026\.10\.10-life-v31'/);
+  assert.match(html, /data-app-build="2026\.10\.10-life-v32"/);
+  assert.match(html, /앱 버전 v32/);
+  assert.match(worker, /APP_BUILD = '2026\.10\.10-life-v32'/);
+  assert.match(registration, /APP_BUILD = '2026\.10\.10-life-v32'/);
 });

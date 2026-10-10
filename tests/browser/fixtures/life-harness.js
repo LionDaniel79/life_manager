@@ -17,7 +17,8 @@ const source={
   async loadLifeData(){h.loadCalls=(h.loadCalls||0)+1;if(h.failLoad)throw Error('offline');const snapshot=structuredClone(goalData);if(h.deferLoad)return new Promise(resolve=>(h.pendingLoads||=[]).push(()=>resolve(snapshot)));return snapshot;},
   async saveLifeData(uid,state,expected){if(expected!==(goalData?.revision||0))throw Error('다른 화면에서 목표가 변경되었습니다.');goalData={...structuredClone(state),entries:[],budgets:[],timer:null,revision:expected+1};localStorage.setItem('life-test-state',JSON.stringify(goalData));h.saves++;return structuredClone(goalData);},
   async loadTimeBudgetData(){return structuredClone(budgets);},invalidate(){},
-  async ensureCurrentWeekBudget(){},async saveDailyBudgetSnapshot(){},
+  async ensureCurrentWeekBudget(uid,snapshot){budgets.weeklyBudgets=[...budgets.weeklyBudgets.filter(b=>b.weekStart!==snapshot.weekStart),structuredClone(snapshot)];},
+  async saveDailyBudgetSnapshot(uid,date,snapshot){budgets.dailyBudgets=[...budgets.dailyBudgets.filter(b=>b.date!==date),structuredClone(snapshot)];},
   async saveDailyBudget(uid,date,overrides){budgets.dailyBudgets=[{date,overrides,userModified:true,defaultSourceVersion:'previous-results-v3'}];},
   async saveWeeklyBudget(uid,weekStart,values,ids){budgets.weeklyBudgets=[{weekStart,budgets:values,explicitBudgetIds:ids,userModified:true,defaultSourceVersion:'previous-results-v3'}];},
 };

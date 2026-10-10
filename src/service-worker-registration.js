@@ -1,4 +1,4 @@
-const APP_BUILD = '2026.10.10-life-v31';
+const APP_BUILD = '2026.10.10-life-v32';
 const BUILD_KEY = 'life-manager:active-build';
 const RESET_KEY = `life-manager:reset:${APP_BUILD}`;
 

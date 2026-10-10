@@ -1,4 +1,4 @@
-import { localDate, goalVersion } from './domain.js';
+import { localDate, goalVersion, goalPeriod, addDays } from './domain.js';
 import { hydrateLife, persistLife, applyLife, validateLife } from './model.js';
 import { goalForm, linkFields, resultForm } from './forms.js';
 import { home, goals, detail, attribution, statistics, settings, action } from './views.js';
@@ -6,6 +6,7 @@ import { esc } from './ui.js';
 import { showToast } from '../app-toast.js';
 
 let infra={}, saved=null, state=hydrateLife(null), userId=null, ready=false, busy=false, loading=false, generation=0, notice='';
+let renderedDate=localDate();
 const dialog=document.createElement('dialog');
 dialog.id='life-dialog'; dialog.className='life-panel'; dialog.setAttribute('aria-labelledby','life-dialog-title'); document.body.append(dialog);
 const cacheKey=uid=>`life-manager-goals:${uid}`;
@@ -15,8 +16,12 @@ function toast(message,error=false){showToast({type:error?'error':'success',titl
 function render() {
   state=hydrateLife(saved,infra);
   const date=localDate();
+  const dateChanged=date!==renderedDate;
+  renderedDate=date;
   const html=[home(state,date),goals(state,date),attribution(state),statistics(state,date),settings()];
   panels.forEach((id,i)=>{const el=document.getElementById(id);if(el)el.innerHTML=html[i];});
+  const detailId=dateChanged&&dialog.open&&!dialog.querySelector('form')?dialog.querySelector('[data-goal-id]')?.dataset.goalId:null;
+  if(detailId)dialog.innerHTML=detail(state,detailId,date);
   document.querySelectorAll('.life-sync').forEach(el=>{el.innerHTML=`<span role="status">${esc(busy?'목표 저장 중…':loading?'목표 불러오는 중…':notice||'목표 동기화 완료')}</span>${!ready&&!loading?action('다시 불러오기','refresh','','text-button'):''}`;});
   document.querySelectorAll('[data-life]:not([data-life="refresh"]):not([data-life="close"]):not([data-life="goals"]):not([data-life="detail"]):not([data-life="backup"]):not([data-life="export-all"]), [data-life-assignment]').forEach(el=>{el.disabled=!ready||busy||loading;});
   document.querySelectorAll('[data-life="refresh"]').forEach(el=>{el.disabled=busy||loading;});
@@ -47,7 +52,22 @@ async function commit(change, replacement=null) {
     if(current===userId&&token===generation){busy=false;render();dialog.querySelectorAll('button[type="submit"]').forEach(b=>b.disabled=false);}
   }
 }
-function open(html){dialog.innerHTML=html;if(!dialog.open)dialog.showModal();impact();}
+function open(html){dialog.innerHTML=html;if(!dialog.open)dialog.showModal();repeatSettings();impact();}
+function repeatSettings() {
+  const form=dialog.querySelector('[data-life-form="goal"]');if(!form)return;
+  const short=form.elements.level.value==='short',repeat=short&&form.elements.repeat.checked;
+  form.querySelector('#life-repeat').hidden=!short;
+  form.elements.repeat.disabled=!short;
+  form.elements.endDate.required=repeat;
+  form.elements.startDate.closest('label').firstChild.textContent=repeat?'반복 기준 시작일':'목표 시작일';
+  form.elements.endDate.closest('label').firstChild.textContent=repeat?'반복 기준 종료일':'목표 종료일 (선택)';
+  const start=form.elements.startDate.value,end=form.elements.endDate.value;
+  const days=start&&end?Math.round((Date.parse(end)-Date.parse(start))/86400000)+1:0;
+  const period=repeat&&days>0?goalPeriod({level:'short',versions:[{effectiveDate:localDate(),startDate:start,endDate:end,repeat:true,status:'active'}]}):null;
+  form.querySelector('#life-repeat-help').textContent=repeat&&days>0
+    ? `${days}일 간격 · ${period.from>localDate()?'첫':'현재'} 기간: ${period.from} ~ ${period.to} · 다음: ${addDays(period.to,1)} ~ ${addDays(period.to,days)}. 시간·숫자 목표는 매 기간의 기준입니다.`
+    : repeat?'반복할 기간의 시작일과 종료일을 입력하세요.':'반복을 켜면 설정한 기간의 길이만큼 계속 이어집니다.';
+}
 function impact(){const f=dialog.querySelector('[data-life-form="goal"]');if(!f)return;const date=f.elements.effectiveDate.value;const count=state.entries.filter(e=>e.date>=date).length;f.querySelector('#life-impact').textContent=`${date} 이후 기록 ${count}건이 있습니다. 연결된 활동·목표 기간에 맞는 기록만 반영됩니다. 여러 중기·단기 목표가 겹치면 시간기록 메뉴에서 직접 배정합니다.`;}
 function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
@@ -89,6 +109,7 @@ document.addEventListener('change',async event=>{
   const el=event.target,form=el.closest('[data-life-form="goal"]');
   if(form){
     if(['level','effectiveDate'].includes(el.name)){form.querySelector('#life-links').innerHTML=linkFields(state,form.elements.level.value,form.elements.id.value,form.elements.effectiveDate.value);form.querySelector('#life-measures').hidden=form.elements.level.value==='life';impact();}
+    if(['level','repeat','startDate','endDate'].includes(el.name))repeatSettings();
   }
   if(el.dataset.lifeAssignment){try{await commit({type:'assignment.save',entryId:el.dataset.lifeAssignment,goalId:el.value||null});}catch(error){toast(error.message,true);render();}}
   if(el.id==='life-import'&&el.files[0]){
@@ -109,11 +130,15 @@ dialog.addEventListener('submit',async event=>{
       const parentId=a.parentId||'',categoryIds=data.getAll('categoryIds'),childIds=data.getAll('childIds');
       if((parentId||categoryIds.length||childIds.length)&&!a.confirmLinks)throw Error('선택한 연결 적용란을 확인하세요.');
       if((a.effectiveDate<localDate()||state.entries.some(e=>e.date>=a.effectiveDate))&&!a.confirmRetroactive)throw Error('기존 기록 집계에 미치는 영향을 확인해 주세요.');
-      await commit({type:'goal.save',...a,parentId,categoryIds,childIds,targetMinutes:a.hours===''?null:Number(a.hours)*60,showHome:!!a.showHome,confirmRetroactive:!!a.confirmRetroactive});
+      await commit({type:'goal.save',...a,parentId,categoryIds,childIds,repeat:a.level==='short'&&a.repeat==='yes',targetMinutes:a.hours===''?null:Number(a.hours)*60,showHome:!!a.showHome,confirmRetroactive:!!a.confirmRetroactive});
     }else await commit({type:`${type}.save`,...a});
     dialog.close();toast('저장했습니다.');
   }catch(error){form.querySelector('.life-error').textContent=error.message;}
 });
 window.addEventListener('online',()=>{if(!dialog.open&&!busy)void refresh();});
 window.addEventListener('focus',()=>{if(!dialog.open&&!busy)void refresh();});
+function refreshDate(){if(localDate()!==renderedDate)render();}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDate();});
+document.addEventListener('weekly-time-budget:view-changed',refreshDate);
+setInterval(refreshDate,60000);
 render();

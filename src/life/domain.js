@@ -2,6 +2,7 @@ const DAY = 86400000;
 const OFFSET = 9 * 3600000;
 export const LEVELS = { life: '생애', long: '장기', medium: '중기', short: '단기' };
 export const PARENT = { long: 'life', medium: 'long', short: 'medium' };
+export const canParent = (child, parent) => Boolean(PARENT[child] && (PARENT[child] === parent || child === 'short' && parent === 'long'));
 export const canLinkActivity = level => level === 'medium' || level === 'short';
 export function comparisonRange(from,to,mode='custom') {
   if(mode==='week') return {from:addDays(from,-7),to:addDays(to,-7)};
@@ -27,6 +28,7 @@ const text = (s, max = 3000) => typeof s === 'string' && s.length <= max;
 const clean = (s, max = 3000) => String(s ?? '').trim().slice(0, max);
 const nullableNumber = n => n === '' || n == null ? null : Number(n);
 const inRange = (d, from, to) => d >= from && (!to || d <= to);
+const inGoalRange = (d, v) => inRange(d, v.startDate, v.repeat ? null : v.endDate);
 export const activeLink = (l, d) => d >= l.validFrom && (!l.validTo || d < l.validTo);
 const upsert = (arr, item) => { const index = arr.findIndex(x => x.id === item.id); if (index < 0) arr.push(item); else arr[index] = item; };
 
@@ -43,6 +45,31 @@ export function createState(date = localDate()) {
 export function goalVersion(goal, date = localDate()) {
   return goal?.versions.filter(v => v.effectiveDate <= date).at(-1) ?? null;
 }
+const sameSchedule = (a,b) => a?.repeat === b?.repeat && a?.startDate === b?.startDate && a?.endDate === b?.endDate;
+function repeatAsOf(goal, asOf) {
+  const versions=goal.versions.filter(v=>v.effectiveDate<=asOf);
+  if(versions.at(-1)?.status==='active') return asOf;
+  // Inactive goals stay on the period where they were stopped, including archive-retained entries.
+  const lastActive=versions.findLastIndex(v=>v.status==='active');
+  return versions[lastActive+1]?.effectiveDate || asOf;
+}
+export function goalPeriod(goal, asOf = localDate()) {
+  const v=goalVersion(goal,asOf);
+  if(goal?.level!=='short'||!v?.repeat||!v.endDate) return null;
+  const index=goal.versions.indexOf(v);
+  let first=index;
+  while(first>0&&sameSchedule(goal.versions[first-1],v))first--;
+  const stop=repeatAsOf(goal,asOf);
+  const anchor=first>0&&goal.versions[first].effectiveDate>stop?goal.versions[first].effectiveDate:stop;
+  const days=Math.round((Date.parse(v.endDate)-Date.parse(v.startDate))/DAY)+1;
+  const offset=Math.max(0,Math.floor((Date.parse(anchor)-Date.parse(v.startDate))/DAY/days));
+  let from=addDays(v.startDate,offset*days),to=addDays(from,days-1);
+  // A changed schedule starts on its effective date; target-only changes keep the current span.
+  if(first>0&&goal.versions[first].effectiveDate>from)from=goal.versions[first].effectiveDate;
+  const next=goal.versions.slice(index+1).find(x=>!sameSchedule(x,v));
+  if(next&&next.effectiveDate<=to)to=addDays(next.effectiveDate,-1);
+  return {from,to,days,index:offset+1};
+}
 export const goalIsDeleted = (goal, date = localDate()) => Boolean(goal?.deletedDate && goal.deletedDate <= date);
 export function listedGoals(s, date = localDate(), archived = false) {
   return s.goals.filter(g => !goalIsDeleted(g,date) && goalVersion(g,date)
@@ -52,7 +79,7 @@ export function linkedActivityGoals(s, categoryId, date) {
   return s.links.filter(l => l.kind === 'activity' && l.fromId === categoryId && activeLink(l, date))
     .map(l => s.goals.find(g => g.id === l.toId)).filter(g => {
       const v = goalVersion(g, date);
-      return !goalIsDeleted(g,date) && canLinkActivity(g?.level) && v && v.status === 'active' && inRange(date, v.startDate, v.endDate);
+      return !goalIsDeleted(g,date) && canLinkActivity(g?.level) && v && v.status === 'active' && inGoalRange(date,v);
     });
 }
 export const retainedPathForEntry = (s, entry) => s.retainedEntryPaths?.find(p => p.entryId === entry.id && p.categoryId === entry.categoryId && p.date === entry.date);
@@ -65,7 +92,7 @@ export function pathForEntry(s, entry) {
   while (id && !path.includes(id)) {
     const goal = s.goals.find(g => g.id === id);
     const v = goalVersion(goal, entry.date);
-    if (!v || goalIsDeleted(goal,entry.date) || goal.level === 'life' || v.status !== 'active' || !inRange(entry.date, v.startDate, v.endDate)) break;
+    if (!v || goalIsDeleted(goal,entry.date) || goal.level === 'life' || v.status !== 'active' || !inGoalRange(entry.date,v)) break;
     path.push(id);
     id = s.links.find(l => l.kind === 'hierarchy' && l.fromId === id && activeLink(l, entry.date))?.toId;
   }
@@ -84,23 +111,37 @@ function retainExistingPaths(s, goalId, fromDate) {
 export function goalSummary(s, id, asOf = localDate()) {
   const goal = s.goals.find(g => g.id === id);
   const version = goalVersion(goal, asOf);
-  if (!version) return { goal, version: null, entries: [], minutes: 0, percent: null, result: null, resultPercent: null, children: [] };
-  const entries = s.entries.filter(e => e.date <= asOf && inRange(e.date, version.startDate, version.endDate) && pathForEntry(s, e).includes(id));
+  if (!version) return { goal, version: null, entries: [], minutes: 0, totalMinutes: 0, period: null, percent: null, result: null, resultPercent: null, children: [] };
+  const period=goalPeriod(goal,asOf);
+  const allEntries=s.entries.filter(e=>e.date<=asOf&&pathForEntry(s,e).includes(id));
+  const entries = allEntries.filter(e => inRange(e.date, period?.from || version.startDate, period?.to || version.endDate));
   const minutes = entries.reduce((sum, e) => sum + e.durationMinutes, 0);
-  const result = s.results.filter(r => r.goalId === id && r.date <= asOf && r.metricKey === version.metricKey).sort((a,b) => a.date.localeCompare(b.date) || a.updatedAt.localeCompare(b.updatedAt)).at(-1) ?? null;
+  const result = s.results.filter(r => r.goalId === id && r.date <= asOf && (!period||inRange(r.date,period.from,period.to)) && r.metricKey === version.metricKey).sort((a,b) => a.date.localeCompare(b.date) || a.updatedAt.localeCompare(b.updatedAt)).at(-1) ?? null;
   const children = s.links.filter(l => l.kind === 'hierarchy' && l.toId === id && activeLink(l, asOf)).map(l => s.goals.find(g => g.id === l.fromId));
   const start = version.resultStart ?? 0;
   const resultPercent = result && version.resultTarget != null && version.resultTarget !== start
     ? (result.value - start) / (version.resultTarget - start) * 100 : null;
-  return { goal, version, entries, minutes, percent: version.targetMinutes == null || goal.level === 'life' ? null : minutes / version.targetMinutes * 100, result, resultPercent, children };
+  return { goal, version, entries, minutes, totalMinutes:allEntries.reduce((sum,e)=>sum+e.durationMinutes,0), period, percent: version.targetMinutes == null || goal.level === 'life' ? null : minutes / version.targetMinutes * 100, result, resultPercent, children };
+}
+export function goalPeriods(s,id,asOf=localDate(),limit=12) {
+  const goal=s.goals.find(g=>g.id===id),rows=[];
+  let cursor=asOf;
+  while(goal&&rows.length<limit) {
+    const row=goalSummary(s,id,cursor);
+    if(!row.version)break;
+    if(row.period&&row.period.from<=cursor&&row.period.from<=row.period.to) {
+      rows.push(row);cursor=addDays(row.period.from,-1);
+    } else cursor=addDays(row.version.effectiveDate,-1);
+  }
+  return rows;
 }
 export function dailyGoalStatus(s, id, asOf = localDate()) {
   const goal = s.goals.find(g => g.id === id);
   const v = goalVersion(goal, asOf);
   if (!v?.dailyMinutes) return [];
-  return dates(v.startDate, v.endDate && v.endDate < asOf ? v.endDate : asOf).flatMap(date => {
+  return dates(v.startDate, !v.repeat && v.endDate && v.endDate < asOf ? v.endDate : asOf).flatMap(date => {
     const historical = goalVersion(goal, date);
-    if (!historical?.dailyMinutes || historical.status !== 'active' || !inRange(date, historical.startDate, historical.endDate)) return [];
+    if (!historical?.dailyMinutes || historical.status !== 'active' || !inGoalRange(date,historical)) return [];
     const entries = s.entries.filter(e => e.date === date && pathForEntry(s, e).includes(id));
     const minutes = entries.reduce((t, e) => t + e.durationMinutes, 0);
     return [{ date, minutes, target: historical.dailyMinutes, status: date === asOf ? 'today' : !entries.length ? 'missing' : minutes >= historical.dailyMinutes ? 'met' : 'below' }];
@@ -155,6 +196,7 @@ function saveGoal(s, a, today) {
   const version = {
     effectiveDate: a.effectiveDate, title: clean(a.title, 120), reason: clean(a.reason), kind: a.kind || 'achievement',
     startDate: a.startDate || a.effectiveDate, endDate: a.endDate || null,
+    repeat: a.repeat ?? false,
     targetMinutes: a.level === 'life' ? null : nullableNumber(a.targetMinutes), dailyMinutes: a.level === 'life' ? null : nullableNumber(a.dailyMinutes),
     resultTarget: a.level === 'life' ? null : nullableNumber(a.resultTarget), resultUnit, metricKey,
     resultStart: a.level === 'life' || a.resultTarget === '' || a.resultTarget == null ? null : nullableNumber(a.resultStart) ?? 0,
@@ -316,7 +358,7 @@ export function validateState(s) {
   const cat = id => s.categories.find(c => c.id === id), goal = id => s.goals.find(g => g.id === id);
   const retained = s.retainedEntryPaths ?? [];
   check(Array.isArray(retained) && retained.length <= 200000 && new Set(retained.map(p => p?.entryId)).size === retained.length,'보존된 시간 연결 목록이 올바르지 않습니다.');
-  for (const p of retained) check(p && text(p.entryId,200) && p.entryId.length > 0 && cat(p.categoryId) && validDate(p.date) && Array.isArray(p.goalIds) && p.goalIds.length > 0 && p.goalIds.length <= 3 && canLinkActivity(goal(p.goalIds[0])?.level) && p.goalIds.every((id,i) => goal(id) && goal(id).level !== 'life' && (!i || PARENT[goal(p.goalIds[i-1]).level] === goal(id).level)),'보존된 시간 연결 경로가 올바르지 않습니다.');
+  for (const p of retained) check(p && text(p.entryId,200) && p.entryId.length > 0 && cat(p.categoryId) && validDate(p.date) && Array.isArray(p.goalIds) && p.goalIds.length > 0 && p.goalIds.length <= 3 && canLinkActivity(goal(p.goalIds[0])?.level) && p.goalIds.every((id,i) => goal(id) && goal(id).level !== 'life' && (!i || canParent(goal(p.goalIds[i-1]).level,goal(id).level))),'보존된 시간 연결 경로가 올바르지 않습니다.');
   for (const c of s.categories) check(text(c.name,80) && c.name.trim() && ['growth','restraint'].includes(c.type) && typeof c.archived === 'boolean' && num(c.order) && (c.budgetMinutes === null || num(c.budgetMinutes,0,10080)) && ['day','week'].includes(c.budgetPeriod), '활동 항목 형식이 올바르지 않습니다.');
   for (const g of s.goals) {
     check(Object.hasOwn(LEVELS,g.level) && Array.isArray(g.versions) && g.versions.length > 0, '목표 단계/기준이 잘못되었습니다.');
@@ -324,6 +366,8 @@ export function validateState(s) {
     let last = '';
     for (const v of g.versions) {
       check(validDate(v.effectiveDate) && v.effectiveDate > last && validDate(v.startDate) && (!v.endDate || validDate(v.endDate) && v.endDate >= v.startDate), '목표 날짜/기준 순서가 잘못되었습니다.'); last = v.effectiveDate;
+      check(v.repeat===undefined||typeof v.repeat==='boolean','반복 설정을 확인하세요.');
+      check(!v.repeat||g.level==='short'&&validDate(v.endDate),'반복은 시작일과 종료일이 있는 단기 목표에서 설정하세요.');
       check(text(v.title,120) && v.title.trim() && text(v.reason) && text(v.nextAction,500) && text(v.changeNote,500), '목표 이름과 내용을 확인하세요.');
       check(['active','paused','completed','archived'].includes(v.status) && ['achievement','maintenance','exploration'].includes(v.kind), '목표 상태가 잘못되었습니다.');
       check([v.targetMinutes,v.dailyMinutes].every(n => n === null || num(n,0.01)) && (v.dailyMinutes === null || v.dailyMinutes <= 1440), '시간 목표 기준은 양수여야 합니다.');
@@ -335,7 +379,7 @@ export function validateState(s) {
   }
   for (const l of s.links) {
     check(validDate(l.validFrom) && (l.validTo === null || validDate(l.validTo) && l.validTo >= l.validFrom), '연결 적용 날짜가 잘못되었습니다.');
-    check(l.kind === 'activity' ? cat(l.fromId) && canLinkActivity(goal(l.toId)?.level) : l.kind === 'hierarchy' && goal(l.fromId) && goal(l.toId) && PARENT[goal(l.fromId).level] === goal(l.toId).level, '목표는 생애–장기–중기–단기 순서로, 시간 기록 항목은 중기·단기 목표에 연결하세요.');
+    check(l.kind === 'activity' ? cat(l.fromId) && canLinkActivity(goal(l.toId)?.level) : l.kind === 'hierarchy' && goal(l.fromId) && goal(l.toId) && canParent(goal(l.fromId).level,goal(l.toId).level), '상위 단계의 목표에 연결하세요. 단기 목표는 중기 또는 장기에, 시간 기록 항목은 중기·단기에 연결할 수 있습니다.');
   }
   const overlap = (a,b) => a.validFrom < (b.validTo || '9999') && b.validFrom < (a.validTo || '9999') && a.validFrom !== a.validTo && b.validFrom !== b.validTo;
   for (let i=0;i<s.links.length;i++) for (let j=i+1;j<s.links.length;j++) {

@@ -1,6 +1,6 @@
 # Life Manager: upstream integration
 
-The final v30/v31 sections supersede earlier menu, card layout, standalone weight/review UI and install identity decisions.
+The final v30–v32 sections supersede earlier menu, hierarchy, card layout, standalone weight/review UI and install identity decisions.
 
 Approved 2026-10-09: extend weekly-time-budget, keep its time recording, budgets, scoring and statistics; add dated life/long/medium/short goals. Publish application source only. Personal planning and prototype remain local.
 
@@ -57,3 +57,9 @@ Goals are the sixth statistics mode, accessible during pending/failed time-data 
 Goal lists use full-width horizontal rows: identity, progress, actions. Container queries adapt the same renderer to phone screens and the detail dialog without altering goal data or behavior.
 
 Production manifests for both apps used id './', which Chromium actually computed as the origin root for both applications. This caused the new app to be treated as already installed. Life Manager now has id '/life_manager/'; the upstream app and both start URLs remain untouched. A real Chromium manifest regression catches accidental identity collisions and verifies installability. Existing installations are not removed automatically; the new identity can leave an old icon beside the new one, while URL-scoped data and login remain intact.
+
+## 2026-10-10 · v32 exact-span repeat and grouped child goals
+
+Short goals optionally repeat their inclusive initial start/end duration, not calendar weeks/months: Sep 1–15, Sep 16–30, Oct 1–15. Optional version.repeat defaults false for legacy data. Period progress resets by calculation; source records, dated attribution and ancestor cumulative totals remain. No scheduled writes or duplicated goals. Current/next dates appear in the editor and current dates on cards; details show the latest 12 periods. Numeric values require a measurement in each period. Inactive status freezes rollover. The shared eligibility/path logic extends repeated goals past their initial end.
+
+Long goals can directly select medium and short children in distinct groups; medium separates short children and basic time categories. canParent extends the existing hierarchy with short→long. Each child has one dated parent; selecting a previously parented child moves it from the effective date and keeps historic paths. Retained archive/delete paths accept this relationship. Existing time recording/budgets/scores and Firebase collections are unchanged.

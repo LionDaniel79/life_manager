@@ -1,0 +1,35 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createState,apply,goalSummary,pathForEntry,validateState} from '../src/life/domain.js';
+import {linkFields} from '../src/life/forms.js';
+const date='2026-10-10';
+const save=(s,id,level,extra={})=>apply(s,{type:'goal.save',id,level,title:id,startDate:'2026-10-01',effectiveDate:'2026-10-01',confirmRetroactive:true,...extra},date);
+test('direct long-to-short parent selection preserves old medium paths and never double counts',()=>{
+  let s=save(createState(date),'long','long');
+  s=save(s,'middle','medium',{parentId:'long'});
+  s=save(s,'short','short',{parentId:'middle',categoryIds:['thesis']});
+  s=apply(s,{type:'entry.save',id:'old',categoryId:'thesis',date:'2026-10-05',durationMinutes:60},date);
+  s=save(s,'long','long',{effectiveDate:date,childIds:['middle','short']});
+  s=apply(s,{type:'entry.save',id:'new',categoryId:'thesis',date,durationMinutes:30},date);
+  assert.deepEqual(pathForEntry(s,s.entries[0]),['short','middle','long']);
+  assert.deepEqual(pathForEntry(s,s.entries[1]),['short','long']);
+  assert.equal(goalSummary(s,'middle',date).minutes,60);
+  assert.equal(goalSummary(s,'long',date).minutes,90);
+  s=apply(s,{type:'goal.archive',id:'short'},date);
+  assert.equal(goalSummary(s,'long',date).minutes,90);
+  assert.equal(validateState(s),true);
+});
+test('forms group medium and short children, and separate basic time categories',()=>{
+  let s=save(createState(date),'long','long');
+  s=save(s,'middle','medium');s=save(s,'short','short');
+  const long=linkFields(s,'long','long',date);
+  assert.match(long,/<legend>하위 중기 목표<\/legend>/);
+  assert.match(long,/<legend>하위 단기 목표<\/legend>/);
+  assert.match(long,/value="short"/);
+  const medium=linkFields(s,'medium','middle',date);
+  assert.match(medium,/<legend>하위 단기 목표<\/legend>/);
+  assert.match(medium,/<legend>기본 항목 \(시간 기록\)<\/legend>/);
+  const short=linkFields(s,'short','short',date);
+  assert.match(short,/<optgroup label="중기 목표">/);
+  assert.match(short,/<optgroup label="장기 목표">/);
+});
