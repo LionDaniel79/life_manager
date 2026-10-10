@@ -1,6 +1,6 @@
 # Life Manager: upstream integration
 
-The final v30 section supersedes earlier menu and standalone weight/review UI decisions.
+The final v30/v31 sections supersede earlier menu, card layout, standalone weight/review UI and install identity decisions.
 
 Approved 2026-10-09: extend weekly-time-budget, keep its time recording, budgets, scoring and statistics; add dated life/long/medium/short goals. Publish application source only. Personal planning and prototype remain local.
 
@@ -51,3 +51,9 @@ Medium and other measurable goals accept baseline, target, unit, and dated absol
 Compact goal cards support a collapsed archive and confirmed deletion. Deletion keeps historical metadata, child goals and source time records. Optional retainedEntryPaths preserve attribution of already-recorded entries on the retirement date while stopping new attribution. They store source IDs and paths only; source duration corrections stay live, and explicit reassignment clears retention. The attribution UI offers both alternate goals and clearing for preserved assignments.
 
 Goals are the sixth statistics mode, accessible during pending/failed time-data loads. Standalone weight/review UI is removed by request; existing stored arrays remain for backup compatibility. Original review findings about same-day totals and hidden correction controls were reproduced and resolved. Deployment identifier: 2026.10.09-life-v30. Final local and production verification evidence is kept in ignored local-data/latest-verification.json.
+
+## 2026-10-10 · v31 horizontal goals and independent installation
+
+Goal lists use full-width horizontal rows: identity, progress, actions. Container queries adapt the same renderer to phone screens and the detail dialog without altering goal data or behavior.
+
+Production manifests for both apps used id './', which Chromium actually computed as the origin root for both applications. This caused the new app to be treated as already installed. Life Manager now has id '/life_manager/'; the upstream app and both start URLs remain untouched. A real Chromium manifest regression catches accidental identity collisions and verifies installability. Existing installations are not removed automatically; the new identity can leave an old icon beside the new one, while URL-scoped data and login remain intact.

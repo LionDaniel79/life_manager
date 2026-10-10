@@ -1,3 +1,32 @@
 .life-panel{font-size:14px;line-height:1.5;min-width:0}.life-panel h2{font-size:18px;margin:12px 0}.life-panel h3{font-size:15px;margin:12px 0 6px}.life-panel p{margin:3px 0}.life-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;margin:8px 0 16px}.life-goal{padding:9px 11px;border:1px solid #d9e3df;border-radius:10px;background:#fff;min-width:0}.life-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px}.life-row strong{overflow-wrap:anywhere}.life-row b{font-size:17px}.life-status{margin-left:auto;font-size:12px}.life-caption{font-size:12px;color:#52685f;overflow-wrap:anywhere}.life-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:5px}.life-actions .text-button{font-size:12px;padding:4px;min-height:34px}.life-actions button:disabled{opacity:.5}.life-panel progress{width:100%;height:6px;margin:4px 0;accent-color:#2d7961}.life-panel .badge{font-size:11px;padding:3px 6px}.life-notice{background:#eff4f1;padding:10px 12px;border-radius:8px}.life-budget-heading{padding-top:12px;border-top:1px solid #d9e3df}.life-sync{font-size:12px;color:#587064;display:flex;justify-content:flex-end;gap:6px;min-height:20px}.life-record-list{max-height:350px;overflow:auto}.life-assignment{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #e4ebe6}.life-secondary{margin-top:18px}.life-panel details{margin:10px 0}.life-panel summary{cursor:pointer}.life-panel li{overflow-wrap:anywhere}.life-panel ul{padding-left:20px}#history-view>.card{max-height:420px;overflow:auto}#life-dialog{border:1px solid #c7d8ce;border-radius:12px;max-width:680px;width:calc(100% - 24px);max-height:90dvh;overflow:auto;padding:20px;background:#fff;color:#193c30}#life-dialog::backdrop{background:#122e2766}#life-dialog form{display:grid;gap:10px}#life-dialog label{display:flex;flex-direction:column;gap:5px}#life-dialog .check{flex-direction:row;align-items:flex-start;gap:8px}#life-dialog input[type=checkbox]{width:18px;min-height:18px;margin-top:2px}#life-dialog input:not([type=checkbox]),#life-dialog select,#life-dialog textarea{width:100%;box-sizing:border-box;min-width:0;padding:9px;border:1px solid #b9cdc2;border-radius:6px;font:inherit}#life-dialog fieldset{border:1px solid #d9e3df;padding:10px;border-radius:8px}#life-dialog .life-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.life-error{color:#a42b25}.life-panel button{min-height:36px}#life-dialog [hidden]{display:none!important}@media(max-width:600px){#life-dialog .life-fields{grid-template-columns:1fr}.life-assignment{grid-template-columns:1fr}.life-grid{gap:8px}.life-goal{padding:9px 10px}.life-panel .section-title{gap:8px;flex-wrap:wrap}.life-actions button{min-height:40px}.main-content{padding-bottom:20px}}
 
 .life-panel[hidden]{display:none!important}.life-goal .life-row{gap:5px}.life-goal .life-row strong{font-size:14px}.life-goal .life-status{font-size:11px}.life-goal .life-actions{gap:5px}.life-goal .life-actions .text-button{font-size:11px;padding:2px 4px;min-height:30px}.life-goal .life-next{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}.life-goal .life-measure{margin-top:3px}.life-archive{border-top:1px solid #d9e3df;padding-top:10px}.life-archive>summary{font-weight:600;color:#52685f}.life-danger{color:#a42b25!important}@media(max-width:600px){.life-goal .life-actions .text-button{min-height:36px}}
+.life-grid { grid-template-columns: minmax(0,1fr); gap: 7px; container-type: inline-size; }
+#life-dialog { container-type: inline-size; }
+.life-goal { display: grid; grid-template-columns: minmax(160px,1fr) minmax(200px,1.6fr) auto; align-items: center; gap: 8px 16px; padding: 8px 12px; }
+.life-goal-heading,.life-goal-metrics,.life-goal-metric { min-width: 0; }
+.life-goal .life-row { gap: 4px 6px; }
+.life-goal .life-row b { font-size: 16px; }
+.life-goal .life-measure { margin-top: 0; }
+.life-goal .life-measure span { font-size: 12px; }
+.life-goal-metrics { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; }
+.life-goal-metric { flex: 1 1 180px; }
+.life-goal progress { display: block; margin: 3px 0; height: 5px; }
+.life-goal .life-actions { margin-top: 0; gap: 4px; justify-content: flex-end; max-width: 285px; }
+.life-goal .life-actions .text-button { font-size: 12px; min-height: 34px; padding: 3px 5px; }
+.life-goal-order { display: inline-flex; flex: 0 0 auto; }
+.life-goal-order .text-button { min-width: 28px; }
+.life-goal .life-direction { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@container (max-width: 760px) {
+  .life-goal { grid-template-columns: minmax(0,1fr) auto; gap: 5px 10px; }
+  .life-goal-heading { grid-column: 1; grid-row: 1; }
+  .life-goal-metrics { grid-column: 1/-1; grid-row: 2; }
+  .life-goal-actions { grid-column: 2; grid-row: 1; }
+  .life-goal-editable .life-goal-heading { grid-column: 1/-1; }
+  .life-goal-editable .life-goal-actions { grid-column: 1/-1; grid-row: 3; max-width: none; justify-content: flex-start; }
+}
+@media (max-width: 600px) {
+  .life-goal { padding: 7px 9px; }
+  .life-goal .life-actions .text-button { min-height: 36px; }
+  .life-goal .life-status { margin-left: 0; }
+}
